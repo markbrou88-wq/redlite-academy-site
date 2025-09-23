@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --brand-red:#E10600; --brand-black:#000; --brand-white:#fff; }
+.btn { @apply px-4 py-2 rounded font-semibold; }
+.btn-red { background: var(--brand-red); color: #fff; }
+.btn-outline { @apply border rounded; }
+.card { @apply border rounded-xl p-4 bg-white; }
+.prose { line-height: 1.55; }

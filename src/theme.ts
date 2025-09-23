@@ -1,0 +1,1 @@
+export const brand = { name: "Redlite Academy", red: "#E10600", black: "#000000", white: "#FFFFFF" };
