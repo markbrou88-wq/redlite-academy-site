@@ -1,25 +1,24 @@
-import { Routes, Route, Link } from "react-router-dom";
-import Standings from "./pages/Standings";
-import Leaders from "./pages/Leaders";
-import Games from "./pages/Games";
-import Game from "./pages/Game"; // we'll create this next
+// src/App.tsx
+import React from "react";
+import { Link, Outlet } from "react-router-dom";
 
 export default function App() {
   return (
-    <div>
-      {/* super simple menu so you can click around */}
-      <nav className="p-4 space-x-4 bg-gray-100">
-        <Link to="/standings">Standings</Link>
-        <Link to="/leaders">Leaders</Link>
-        <Link to="/games">Games</Link>
-      </nav>
+    <div className="min-h-screen bg-white text-black">
+      <header className="border-b">
+        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+          <Link to="/" className="text-xl font-bold">Redlite Academy</Link>
+          <nav className="flex gap-6">
+            <Link to="/league/standings" className="hover:underline">Standings</Link>
+            <Link to="/league/leaders" className="hover:underline">Leaders</Link>
+            <Link to="/league/games" className="hover:underline">Games</Link>
+          </nav>
+        </div>
+      </header>
 
-      <Routes>
-        <Route path="/standings" element={<Standings />} />
-        <Route path="/leaders" element={<Leaders />} />
-        <Route path="/games" element={<Games />} />
-        <Route path="/games/:slug" element={<Game />} />
-      </Routes>
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <Outlet />
+      </main>
     </div>
   );
 }
