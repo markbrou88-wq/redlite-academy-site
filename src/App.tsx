@@ -1,28 +1,25 @@
-import { useState } from 'react';
-import Nav from './components/Nav';
-import News from './pages/News';
-import League from './pages/League';
-import Tournaments from './pages/Tournaments';
-import Sponsors from './pages/Sponsors';
-import Logger from './pages/Logger';
-import Admin from './pages/Admin';
+import { Routes, Route, Link } from "react-router-dom";
+import Standings from "./pages/Standings";
+import Leaders from "./pages/Leaders";
+import Games from "./pages/Games";
+import Game from "./pages/Game"; // we'll create this next
 
-export default function App(){
-  const [tab,setTab]=useState<string>('news');
+export default function App() {
   return (
-    <div className="min-h-screen flex flex-col">
-      <Nav tab={tab} setTab={setTab} />
-      <main className="flex-1">
-        <div className="max-w-6xl mx-auto p-6">
-          {tab==='news' && <News />}
-          {tab==='league' && <League />}
-          {tab==='tournaments' && <Tournaments />}
-          {tab==='sponsors' && <Sponsors />}
-          {tab==='logger' && <Logger />}
-          {tab==='admin' && <Admin />}
-        </div>
-      </main>
-      <footer className="text-center text-sm py-6 text-gray-500">© {new Date().getFullYear()} Redlite Academy</footer>
+    <div>
+      {/* super simple menu so you can click around */}
+      <nav className="p-4 space-x-4 bg-gray-100">
+        <Link to="/standings">Standings</Link>
+        <Link to="/leaders">Leaders</Link>
+        <Link to="/games">Games</Link>
+      </nav>
+
+      <Routes>
+        <Route path="/standings" element={<Standings />} />
+        <Route path="/leaders" element={<Leaders />} />
+        <Route path="/games" element={<Games />} />
+        <Route path="/games/:slug" element={<Game />} />
+      </Routes>
     </div>
   );
 }
