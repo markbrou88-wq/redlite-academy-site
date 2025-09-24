@@ -2,16 +2,15 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 type Row = {
-  team: string;
+  name: string;   // team name
   gp: number;
   w: number;
   l: number;
-  t: number;
+  otl: number;    // overtime losses (your view uses this)
+  pts: number;
   gf: number;
   ga: number;
-  gd: number;
-  pts: number;
-  pts_pct: number;
+  diff: number;   // goal diff in your view
 };
 
 export default function Standings() {
@@ -19,24 +18,26 @@ export default function Standings() {
 
   useEffect(() => {
     const load = async () => {
-      // If your view is called `standings_current`, change to:
-      // const { data } = await supabase.from('standings_current').select('*');
-      const { data, error } = await supabase.from('team_standings').select('*');
+      // your view name from the screenshots
+      const { data, error } = await supabase
+        .from('standings_current')
+        .select('*');
+
       if (!error && data) setRows(data as Row[]);
     };
 
     load();
 
-    // Realtime: reload standings whenever games table changes
+    // refresh when games change
     const ch = supabase
       .channel('standings-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => load())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(ch);
-    };
+    return () => supabase.removeChannel(ch);
   }, []);
+
+  const ptsPct = (r: Row) => (r.gp > 0 ? (r.pts / (r.gp * 2)).toFixed(3) : '0.000');
 
   return (
     <section className="space-y-6">
@@ -49,7 +50,7 @@ export default function Standings() {
               <th className="p-2">GP</th>
               <th className="p-2">W</th>
               <th className="p-2">L</th>
-              <th className="p-2">T</th>
+              <th className="p-2">OTL</th>
               <th className="p-2">GF</th>
               <th className="p-2">GA</th>
               <th className="p-2">GD</th>
@@ -59,17 +60,17 @@ export default function Standings() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.team} className="border-b">
-                <td className="p-2 font-semibold">{r.team}</td>
+              <tr key={r.name} className="border-b">
+                <td className="p-2 font-semibold">{r.name}</td>
                 <td className="p-2">{r.gp}</td>
                 <td className="p-2">{r.w}</td>
                 <td className="p-2">{r.l}</td>
-                <td className="p-2">{r.t}</td>
+                <td className="p-2">{r.otl}</td>
                 <td className="p-2">{r.gf}</td>
                 <td className="p-2">{r.ga}</td>
-                <td className="p-2">{r.gd}</td>
+                <td className="p-2">{r.diff}</td>
                 <td className="p-2">{r.pts}</td>
-                <td className="p-2">{Number(r.pts_pct).toFixed(3)}</td>
+                <td className="p-2">{ptsPct(r)}</td>
               </tr>
             ))}
           </tbody>
