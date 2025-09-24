@@ -1,17 +1,34 @@
-import { useEffect, useState } from 'react'; import { supabase } from '../lib/supabase';
-type Row={ name:string; team:string; jersey:number|null; gp:number; goals:number; assists:number; points:number; shots:number; pts_per_gp:number };
-export default function Leaders(){
-  const [rows,setRows]=useState<Row[]>([]); const [loading,setLoading]=useState(true);
-  const load=async()=>{ setLoading(true); const { data } = await supabase.from('player_stats').select('*'); setRows((data||[]) as any); setLoading(false); };
-  useEffect(()=>{ load(); const ch=supabase.channel('leaders-live').on('postgres_changes',{event:'*',schema:'public',table:'events'},()=>load()).subscribe(); return ()=>supabase.removeChannel(ch); },[]);
-  if(loading) return <p className="p-6">Loading…</p>;
-  return (<section className="space-y-6"><h3 className="text-xl font-bold">Scoring Leaders</h3>
-    <div className="overflow-x-auto rounded-xl border"><table className="w-full text-left">
-      <thead style={{background:"var(--brand-red)",color:"#fff"}}><tr>
-        <th className="p-2">Player</th><th className="p-2">Team</th><th className="p-2">G</th><th className="p-2">A</th><th className="p-2">PTS</th><th className="p-2">SOG</th><th className="p-2">Pts/GP</th></tr></thead>
-      <tbody>{rows.map((r:any,i:number)=>(<tr key={i} className="border-t">
-        <td className="p-2 font-semibold">{r.name} {r.jersey?`#${r.jersey}`:''}</td>
-        <td className="p-2">{r.team}</td><td className="p-2">{r.goals}</td><td className="p-2">{r.assists}</td>
-        <td className="p-2">{r.points}</td><td className="p-2">{r.shots}</td><td className="p-2">{Number(r.pts_per_gp||0).toFixed(2)}</td></tr>))}</tbody>
-    </table></div></section>);
-}
+-- Leaders view: player, team, gp, g, a, pts
+create or replace view public.leaders_current as
+with
+  games_played as (
+    -- count distinct games a player appeared in (based on having any event)
+    select player_id, count(distinct game_id) as gp
+    from public.events
+    group by 1
+  ),
+  goals as (
+    select player_id, count(*) as g
+    from public.events
+    where event = 'goal'
+    group by 1
+  ),
+  assists as (
+    select player_id, count(*) as a
+    from public.events
+    where event = 'assist'
+    group by 1
+  )
+select
+  p.id as player_id,
+  p.name as player,
+  t.name as team,
+  coalesce(gp.gp, 0) as gp,
+  coalesce(g.g, 0)  as g,
+  coalesce(a.a, 0)  as a,
+  coalesce(g.g, 0) + coalesce(a.a, 0) as pts
+from public.players p
+left join public.teams t on t.id = p.team_id
+left join games_played gp on gp.player_id = p.id
+left join goals g on g.player_id = p.id
+left join assists a on a.player_id = p.id;
