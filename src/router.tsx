@@ -1,8 +1,8 @@
 // src/router.tsx
-import React from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import App from "./App";
-import League from "./pages/League";
+
+// Your pages
 import Standings from "./pages/Standings";
 import Leaders from "./pages/Leaders";
 import Games from "./pages/Games";
@@ -10,19 +10,17 @@ import Games from "./pages/Games";
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <App />,              // global layout (header/nav)
+    element: <App />,
     children: [
+      // Landing -> redirect to standings
       { index: true, element: <Navigate to="/league/standings" replace /> },
-      {
-        path: "league",
-        element: <League />,        // league tabs wrapper
-        children: [
-          { index: true, element: <Navigate to="standings" replace /> },
-          { path: "standings", element: <Standings /> },
-          { path: "leaders", element: <Leaders /> },
-          { path: "games", element: <Games /> },
-        ],
-      },
+
+      { path: "/league/standings", element: <Standings /> },
+      { path: "/league/leaders", element: <Leaders /> },
+      { path: "/league/games", element: <Games /> },
+
+      // 404
+      { path: "*", element: <Navigate to="/league/standings" replace /> },
     ],
   },
 ]);
