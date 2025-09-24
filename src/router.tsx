@@ -20,6 +20,7 @@ export const router = createBrowserRouter([
       { path: "/league/leaders", element: <Leaders /> },
       { path: "/league/games", element: <Games /> },
       { path: "/league/games/:slug", element: <GameSummary /> },
+      { path: "/admin/scorer", element: <Scorer /> },
 
       // 404
       { path: "*", element: <Navigate to="/league/standings" replace /> },
