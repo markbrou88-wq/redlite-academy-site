@@ -53,9 +53,12 @@ export default function Games() {
           {games.map((g) => (
             <tr key={g.slug} className="border-b hover:bg-gray-50">
               <td className="p-2">
-                <Link className="text-blue-600 hover:underline" to={`/games/${g.slug}`}>
-                  {new Date(g.game_date).toLocaleString()}
-                </Link>
+                <Link
+  className="text-blue-600 hover:underline"
+  to={`/league/games/${g.slug}`}
+>
+  {new Date(g.game_date).toLocaleString()}
+</Link>
               </td>
               <td className="p-2">{g.home_team?.name ?? "-"}</td>
               <td className="p-2">{g.away_team?.name ?? "-"}</td>
