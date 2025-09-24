@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase'; // adjust if you use '@/lib/supabase'
+import { supabase } from '../lib/supabase'; // adjust if your path is different
 
 type Row = {
   player_id: string;
@@ -16,7 +16,7 @@ export default function Leaders() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    let alive = true;
 
     (async () => {
       const { data, error } = await supabase
@@ -28,14 +28,14 @@ export default function Leaders() {
 
       if (error) {
         console.error('leaders_current error', error);
-      } else if (isMounted) {
-        setRows(data as Row[]);
+      } else if (alive) {
+        setRows((data ?? []) as Row[]);
       }
       setLoading(false);
     })();
 
     return () => {
-      isMounted = false;
+      alive = false;
     };
   }, []);
 
