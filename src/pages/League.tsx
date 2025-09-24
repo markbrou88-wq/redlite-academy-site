@@ -1,23 +1,20 @@
-// src/pages/League.tsx (only the relevant bits)
-import { useState } from 'react';
-import Games from './Games';
-import BoxScore from './BoxScore';
+// src/pages/League.tsx
+import React from "react";
+import { NavLink, Outlet } from "react-router-dom";
 
 export default function League() {
-  const [sub, setSub] = useState<'leaders' | 'standings' | 'games' | 'box'>('leaders');
-  const [gameSlug, setGameSlug] = useState<string | null>(null);
+  const link = ({ isActive }: { isActive: boolean }) =>
+    isActive ? "font-semibold underline" : "text-gray-600 hover:underline";
 
   return (
-    <section className="space-y-6">
-      {/* nav buttons ... */}
-      {sub === 'games' && <Games onOpen={(slug) => { setGameSlug(slug); setSub('box'); }} />}
-      {sub === 'box' && gameSlug && (
-        <BoxScore
-          gameSlug={gameSlug}
-          onBack={() => { setGameSlug(null); setSub('games'); }}
-        />
-      )}
-      {/* leaders/standings ... */}
-    </section>
+    <div>
+      <div className="mb-6 flex gap-6">
+        <NavLink to="standings" className={link}>standings</NavLink>
+        <NavLink to="leaders" className={link}>leaders</NavLink>
+        <NavLink to="games" className={link}>games</NavLink>
+      </div>
+      <Outlet />
+    </div>
   );
 }
+
