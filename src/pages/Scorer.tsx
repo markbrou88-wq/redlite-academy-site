@@ -87,7 +87,7 @@ export default function Scorer() {
 
   async function loadGoalLinesForGame(game: Game) {
     const { data, error } = await supabase
-      .from("goal_lines_extended_v2")   // << using the v2 view
+      .from("goal_lines_ext_v2")   // << using the v2 view
       .select("period, time_mmss, team_short, scorer_name, assist1_name, assist2_name")
       .eq("slug", game.slug)
       .order("period", { ascending: true })
@@ -321,7 +321,7 @@ export default function Scorer() {
 
       {message && <div className="text-sm">{message}</div>}
 
-      {/* Live goal lines for the selected game (from goal_lines_extended_v2) */}
+      {/* Live goal lines for the selected game (from goal_lines_ext_v2) */}
       {selectedGame && (
         <div>
           <h2 className="text-lg font-semibold mt-8 mb-3">
