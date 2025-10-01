@@ -147,14 +147,21 @@ export default function GameSummary() {
               </h3>
               <ul className="list-disc pl-6 space-y-1">
                 {lines.map((g, i) => {
-                  const assists = [g.assist1_name, g.assist2_name].filter(Boolean).join(", ");
-                  return (
-                    <li key={`${period}-${i}`}>
-                      <span className="text-gray-500 mr-2">{g.time_mmss}</span>
-                      BUT {g.team_short ? `(${g.team_short}) ` : ""}:
-                        {g.scorer_name ?? "—"}
-                        {g.assists ? `  ASS : ${g.assists}` : ""}
-                    </li>
+  // Build, clean, and limit assists
+  const raw = [g.assist1_name, g.assist2_name].filter(Boolean) as string[];
+  // remove scorer if present + dedupe while preserving order
+  const cleaned = Array.from(
+    new Set(raw.filter((n) => n && n !== g.scorer_name))
+  ).slice(0, 2);
+  const assists = cleaned.join(", ");
+
+  return (
+    <li key={`${period}-${i}`}>
+      <span className="text-gray-500 mr-2">{g.time_mmss}</span>
+      BUT {g.team_short ? `(${g.team_short}) ` : ""}:
+      {g.scorer_name ? ` ${g.scorer_name}` : " —"}
+      {assists ? `  ASS : ${assists}` : ""}
+    </li>
                   );
                 })}
               </ul>
