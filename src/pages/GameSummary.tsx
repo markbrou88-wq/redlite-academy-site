@@ -17,10 +17,10 @@ type Game = {
 type GoalLine = {
   period: number;
   time_mmss: string;
-  team_short: string | null;     // e.g. RLR / RLB / RLC
-  scorer_name: string | null;    // “BUT : …”
-  assists: string | null;   // first assist (may be null)
-  
+  team_short: string | null;
+  scorer_name: string | null;
+  assist1_name: string | null;
+  assist2_name: string | null;
 };
 
 export default function GameSummary() {
@@ -32,69 +32,41 @@ export default function GameSummary() {
 
   useEffect(() => {
     let alive = true;
-
     (async () => {
       if (!slug) {
-        setErr("Slug de match manquant.");
+        setErr("Slug manquant.");
         setLoading(false);
         return;
       }
-
-      // 1) Charger le match
       const { data: gameData, error: gErr } = await supabase
         .from("games")
         .select(`
-          id,
-          game_date,
-          status,
-          home_score,
-          away_score,
+          id, game_date, status, home_score, away_score,
           home_team:home_team_id(name),
           away_team:away_team_id(name)
         `)
         .eq("slug", slug)
         .maybeSingle();
 
-      if (gErr) {
-        if (alive) { setErr(gErr.message); setLoading(false); }
-        return;
-      }
-      if (!gameData) {
-        if (alive) { setErr("Partie introuvable."); setLoading(false); }
-        return;
-      }
+      if (gErr) { if (alive) { setErr(gErr.message); setLoading(false); } return; }
+      if (!gameData) { if (alive) { setErr("Partie introuvable."); setLoading(false); } return; }
+
       if (alive) setGame(gameData as Game);
 
-      // 2) Charger les buts via la vue goal_lines_extended
       const { data: glData, error: glErr } = await supabase
-        .from("goal_lines_ext_v2") // <- name of the view
-        .select(`
-          period,
-          time_mmss,
-          team_short,
-          scorer_name,
-          assists
-          
-        `)
+        .from("goal_lines_ext_v2")    // 🔴 use the short name
+        .select("period, time_mmss, team_short, scorer_name, assist1_name, assist2_name")
         .eq("slug", slug)
         .order("period", { ascending: true })
         .order("time_mmss", { ascending: true });
 
-      if (glErr) {
-        if (alive) { setErr(glErr.message); setLoading(false); }
-        return;
-      }
+      if (glErr) { if (alive) { setErr(glErr.message); setLoading(false); } return; }
 
-      if (alive) {
-        setGoals((glData ?? []) as GoalLine[]);
-        setLoading(false);
-      }
+      if (alive) { setGoals((glData ?? []) as GoalLine[]); setLoading(false); }
     })();
-
     return () => { alive = false; };
   }, [slug]);
 
-  // Regrouper par période
   const goalsByPeriod = useMemo(() => {
     const m = new Map<number, GoalLine[]>();
     for (const g of goals) {
@@ -110,18 +82,13 @@ export default function GameSummary() {
   if (!game) return <div className="p-4">Partie introuvable.</div>;
 
   const dateStr = new Date(game.game_date).toLocaleDateString("fr-CA", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
 
   return (
     <div className="p-4 space-y-6">
       <div className="text-sm">
-        <Link className="text-blue-600 hover:underline" to="/league/games">
-          ← Retour aux matchs
-        </Link>
+        <Link className="text-blue-600 hover:underline" to="/league/games">← Retour aux matchs</Link>
       </div>
 
       <h1 className="text-2xl font-bold">{dateStr}</h1>
@@ -140,28 +107,18 @@ export default function GameSummary() {
           {goalsByPeriod.map(([period, lines]) => (
             <div key={period}>
               <h3 className="font-semibold mb-2">
-                {period === 1 ? "1re période"
-                 : period === 2 ? "2e période"
-                 : period === 3 ? "3e période"
-                 : `Période ${period}`}
+                {period === 1 ? "1re période" : period === 2 ? "2e période" : period === 3 ? "3e période" : `Période ${period}`}
               </h3>
               <ul className="list-disc pl-6 space-y-1">
                 {lines.map((g, i) => {
-  // Build, clean, and limit assists
-  const raw = [g.assist1_name, g.assist2_name].filter(Boolean) as string[];
-  // remove scorer if present + dedupe while preserving order
-  const cleaned = Array.from(
-    new Set(raw.filter((n) => n && n !== g.scorer_name))
-  ).slice(0, 2);
-  const assists = cleaned.join(", ");
-
-  return (
-    <li key={`${period}-${i}`}>
-      <span className="text-gray-500 mr-2">{g.time_mmss}</span>
-      BUT {g.team_short ? `(${g.team_short}) ` : ""}:
-      {g.scorer_name ? ` ${g.scorer_name}` : " —"}
-      {assists ? `  ASS : ${assists}` : ""}
-    </li>
+                  const raw = [g.assist1_name, g.assist2_name].filter(Boolean) as string[];
+                  const assists = Array.from(new Set(raw)); // no duplicates
+                  return (
+                    <li key={`${period}-${g.time_mmss}-${i}`}>
+                      <span className="text-gray-500 mr-2">{g.time_mmss}</span>
+                      BUT {g.team_short ? `(${g.team_short}) ` : ""}:{g.scorer_name ?? "—"}
+                      {assists.length ? `  ASS : ${assists.join(", ")}` : ""}
+                    </li>
                   );
                 })}
               </ul>
