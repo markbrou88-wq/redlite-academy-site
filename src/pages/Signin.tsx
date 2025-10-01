@@ -4,8 +4,8 @@ import { supabase } from "../lib/supabase";
 
 /**
  * Simple Auth screen (email / password) for Supabase.
- * - "Se connecter" = signInWithPassword
- * - "Créer un compte" = signUp
+ * - "Se connecter" = SignInWithPassword
+ * - "Créer un compte" = SignUp
  * After success we redirect to the desired page (default: /admin/scorer).
  */
 export default function Signin() {
@@ -13,11 +13,11 @@ export default function Signin() {
   const location = useLocation();
 
   // If you navigated here from a protected page, we keep where to go back to:
-  // e.g. navigate("/signin", { state: { from: "/admin/scorer" } })
+  // e.g. navigate("/Signin", { state: { from: "/admin/scorer" } })
   const redirectTo =
     (location.state as any)?.from || "/admin/scorer";
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"Signin" | "Signup">("Signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,8 +35,8 @@ export default function Signin() {
     try {
       setLoading(true);
 
-      if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({
+      if (mode === "Signin") {
+        const { error } = await supabase.auth.SignInWithPassword({
           email,
           password,
         });
@@ -47,7 +47,7 @@ export default function Signin() {
       } else {
         // Sign up: create account and (optionally) auto-login.
         // You can keep the redirect option; Supabase will use your allowed URLs.
-        const { error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.SignUp({
           email,
           password,
           options: {
@@ -68,7 +68,7 @@ export default function Signin() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md border rounded-lg p-6 shadow-sm">
         <h1 className="text-2xl font-bold mb-4">
-          {mode === "signin" ? "Se connecter" : "Créer un compte"}
+          {mode === "Signin" ? "Se connecter" : "Créer un compte"}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -92,7 +92,7 @@ export default function Signin() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              autoComplete={mode === "Signin" ? "current-password" : "new-password"}
             />
           </label>
 
@@ -103,7 +103,7 @@ export default function Signin() {
           >
             {loading
               ? "En cours…"
-              : mode === "signin"
+              : mode === "Signin"
               ? "Se connecter"
               : "Créer le compte"}
           </button>
@@ -114,9 +114,9 @@ export default function Signin() {
         <div className="mt-6 text-sm flex items-center justify-between">
           <button
             className="underline"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+            onClick={() => setMode(mode === "Signin" ? "Signup" : "Signin")}
           >
-            {mode === "signin"
+            {mode === "Signin"
               ? "Créer un compte"
               : "J’ai déjà un compte"}
           </button>
