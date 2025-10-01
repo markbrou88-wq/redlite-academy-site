@@ -21,7 +21,7 @@ export const router = createBrowserRouter([
       { path: "/league/games/:slug", element: <GameSummary /> },
 
       // Auth pages
-      { path: "/signin", element: <Signin /> },
+      { path: "/Signin", element: <Signin /> },
 
       // Scorer (the page itself already redirects to /signin if not logged in)
       { path: "/admin/scorer", element: <Scorer /> },
