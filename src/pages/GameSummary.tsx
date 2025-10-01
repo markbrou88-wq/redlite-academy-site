@@ -19,8 +19,8 @@ type GoalLine = {
   time_mmss: string;
   team_short: string | null;     // e.g. RLR / RLB / RLC
   scorer_name: string | null;    // “BUT : …”
-  assist1_name: string | null;   // first assist (may be null)
-  assist2_name: string | null;   // second assist (may be null)
+  assists: string | null;   // first assist (may be null)
+  
 };
 
 export default function GameSummary() {
@@ -73,8 +73,8 @@ export default function GameSummary() {
           time_mmss,
           team_short,
           scorer_name,
-          assist1_name,
-          assist2_name
+          assists
+          
         `)
         .eq("slug", slug)
         .order("period", { ascending: true })
@@ -152,8 +152,8 @@ export default function GameSummary() {
                     <li key={`${period}-${i}`}>
                       <span className="text-gray-500 mr-2">{g.time_mmss}</span>
                       BUT {g.team_short ? `(${g.team_short}) ` : ""}:
-                      {g.scorer_name ? ` ${g.scorer_name}` : " —"}
-                      {assists ? `  ASS : ${assists}` : ""}
+                        {g.scorer_name ?? "—"}
+                        {g.assists ? `  ASS : ${g.assists}` : ""}
                     </li>
                   );
                 })}
