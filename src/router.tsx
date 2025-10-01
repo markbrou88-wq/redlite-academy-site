@@ -7,6 +7,7 @@ import Standings from "./pages/Standings";
 import Leaders from "./pages/Leaders";
 import Games from "./pages/Games";
 import GameSummary from "./pages/GameSummary";
+import Scorer from "./pages/Scorer";
 
 export const router = createBrowserRouter([
   {
