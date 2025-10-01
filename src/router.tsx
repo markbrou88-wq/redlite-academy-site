@@ -7,6 +7,7 @@ import Games from "./pages/Games";
 import GameSummary from "./pages/GameSummary";
 import Scorer from "./pages/Scorer";
 import Signin from "./pages/Signin";
+import Signup from "./pages/Signin";
 
 export const router = createBrowserRouter([
   {
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
 
       // Auth pages
       { path: "/Signin", element: <Signin /> },
+      { path: "/Signup", element: <Signup /> },
 
       // Scorer (the page itself already redirects to /signin if not logged in)
       { path: "/admin/scorer", element: <Scorer /> },
