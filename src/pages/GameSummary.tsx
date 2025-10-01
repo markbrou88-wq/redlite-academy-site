@@ -67,7 +67,7 @@ export default function GameSummary() {
 
       // 2) Charger les buts via la vue goal_lines_extended
       const { data: glData, error: glErr } = await supabase
-        .from("goal_lines_extended") // <- name of the view
+        .from("goal_lines_ext_v2") // <- name of the view
         .select(`
           period,
           time_mmss,
