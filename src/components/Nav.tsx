@@ -1,55 +1,68 @@
 // src/components/Nav.tsx
-import { Link } from "react-router-dom";
-import { brand } from "../theme";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 
-type Props = {
-  tab: string;
-  setTab: (t: string) => void;
-};
+export default function Nav() {
+  const { pathname } = useLocation();
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-export default function Nav({ tab, setTab }: Props) {
-  // keep your existing tabs
-  const tabs = ["news", "league", "tournaments", "sponsors", "logger", "admin"] as const;
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (mounted) {
+        setIsAuthed(!!data.session);
+        setLoading(false);
+      }
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthed(!!session);
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription?.unsubscribe();
+    };
+  }, []);
+
+  const link = (to: string, label: string) => (
+    <Link
+      to={to}
+      className={`px-3 py-2 rounded ${
+        pathname.startsWith(to) ? "bg-black text-white" : "hover:bg-gray-100"
+      }`}
+    >
+      {label}
+    </Link>
+  );
 
   return (
-    <header
-      className="px-6 py-5 shadow"
-      style={{ background: brand.black, color: brand.white }}
-    >
-      <div className="max-w-6xl mx-auto flex items-center justify-between">
-        {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full" style={{ background: brand.red }} />
-          <h1 className="text-xl sm:text-2xl font-extrabold tracking-wide">
-            {brand.name}
-          </h1>
-        </div>
+    <header className="border-b">
+      <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
+        <div className="font-bold">Redlite Academy</div>
+        <nav className="flex gap-2">
+          {link("/league/standings", "Standings")}
+          {link("/league/leaders", "Leaders")}
+          {link("/league/games", "Games")}
+          {!loading && isAuthed && link("/admin/scorer", "Scorer")}
+        </nav>
 
-        {/* Tabs + Scorer link */}
-        <div className="flex items-center gap-4">
-          <nav className="flex gap-4 text-sm sm:text-base">
-            {tabs.map((t) => (
-              <button
-                key={t}
-                className={`uppercase tracking-wide ${
-                  tab === t ? "border-b-2" : ""
-                }`}
-                style={{ borderColor: brand.red }}
-                onClick={() => setTab(t)}
-              >
-                {t}
-              </button>
-            ))}
-          </nav>
-
-          {/* Scorer link — goes to /admin/scorer route */}
-          <Link
-            to="/admin/scorer"
-            className="text-xs sm:text-sm underline"
-            style={{ color: brand.white, opacity: 0.9 }}
-          >
-            Scorer
-          </Link>
+        <div className="ml-auto">
+          {!loading && !isAuthed && link("/auth/signin", "Login")}
+          {!loading && isAuthed && (
+            <button
+              className="px-3 py-2 rounded hover:bg-gray-100"
+              onClick={async () => {
+                await supabase.auth.signOut();
+              }}
+            >
+              Logout
+            </button>
+          )}
         </div>
       </div>
     </header>
