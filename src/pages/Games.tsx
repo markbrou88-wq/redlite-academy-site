@@ -22,17 +22,18 @@ export default function Games() {
     let alive = true;
     (async () => {
       const { data, error } = await supabase
-        .from("games_with_score")
-        .select(`
-          slug,
-          game_date,
-          status,
-          home_goals,
-          away_goals,
-          home_team:home_team_id(name),
-          away_team:away_team_id(name)
-        `)
-        .order("game_date", { ascending: false });
+  .from("games_scores_v2")
+  .select(`
+    slug,
+    game_date,
+    status,
+    home_score,
+    away_score,
+    home_team:home_team_id(name),
+    away_team:away_team_id(name)
+  `)
+  .order("game_date", { ascending: false });
+
 
       if (!error && alive && data) setGames(data as GameRow[]);
       setLoading(false);
