@@ -20,8 +20,10 @@ export default function Standings() {
     const load = async () => {
       // your view name from the screenshots
       const { data, error } = await supabase
-        .from('standings_from_events_v')
-        .select('*');
+  .from("standings_by_team_v2")
+  .select(`name, gp, w, l, otl, gf, ga, gd, pts`)
+  .order("pts", { ascending: false });
+
 
       if (!error && data) setRows(data as Row[]);
     };
