@@ -1,5 +1,5 @@
 // src/pages/GameSummary.tsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
@@ -10,176 +10,56 @@ type Game = {
   status: string | null;
   home_team: TeamRow | null;
   away_team: TeamRow | null;
-  home_score: number | null;
-  away_score: number | null;
+  home_goals: number | null;    // live from view
+  away_goals: number | null;    // live from view
 };
 
-type GoalLine = {
-  period: number;
-  time_mmss: string;
-  team_short: string | null;     // e.g. RLR / RLB / RLC
-  scorer_name: string | null;    // “BUT : …”
-  assist1_name: string | null;   // first assist (may be null)
-  assist2_name: string | null;   // second assist (may be null)
-};
+// ... keep your GoalLine + everything else the same ...
 
 export default function GameSummary() {
   const { slug } = useParams();
   const [game, setGame] = useState<Game | null>(null);
-  const [goals, setGoals] = useState<GoalLine[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  // ---- loaders -------------------------------------------------------------
-
-  const loadGame = useCallback(async (theSlug: string) => {
-    const { data, error } = await supabase
-      .from("games")
-      .select(`
-        id,
-        game_date,
-        status,
-        home_score,
-        away_score,
-        home_team:home_team_id(name),
-        away_team:away_team_id(name)
-      `)
-      .eq("slug", theSlug)
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!data) throw new Error("Partie introuvable.");
-    return data as Game;
-  }, []);
-
-  const loadGoalLines = useCallback(async (theSlug: string) => {
-    // use your view with assists resolved
-    const { data, error } = await supabase
-      .from("goal_lines_ext_v2") // <— make sure the view is named like this
-      .select(`
-        period,
-        time_mmss,
-        team_short,
-        scorer_name,
-        assist1_name,
-        assist2_name
-      `)
-      .eq("slug", theSlug)
-      .order("period", { ascending: true })
-      .order("time_mmss", { ascending: true });
-
-    if (error) throw error;
-    return (data ?? []) as GoalLine[];
-  }, []);
-
-  // ---- initial fetch -------------------------------------------------------
+  // keep your other state (goals, loading, etc.)
 
   useEffect(() => {
     let alive = true;
-
     (async () => {
-      try {
-        if (!slug) throw new Error("Slug manquant.");
+      if (!slug) return;
 
-        const [g, gl] = await Promise.all([loadGame(slug), loadGoalLines(slug)]);
+      // Fetch the live score + team names
+      const { data: gameData, error: gErr } = await supabase
+        .from("games_with_score")
+        .select(`
+          id,
+          game_date,
+          status,
+          home_goals,
+          away_goals,
+          home_team:home_team_id(name),
+          away_team:away_team_id(name)
+        `)
+        .eq("slug", slug)
+        .maybeSingle();
 
-        if (!alive) return;
-        setGame(g);
-        setGoals(gl);
-        setLoading(false);
-      } catch (e: any) {
-        if (!alive) return;
-        setErr(e.message ?? "Erreur de chargement");
-        setLoading(false);
+      if (!gErr && gameData && alive) {
+        setGame(gameData as Game);
       }
+
+      // ... keep your logic that loads goal lines (ext_v2) ...
     })();
+    return () => { alive = false; };
+  }, [slug]);
 
-    return () => {
-      alive = false;
-    };
-  }, [slug, loadGame, loadGoalLines]);
+  // ... keep your grouping + rendering ...
 
-  // ---- realtime subscriptions ---------------------------------------------
-
-  useEffect(() => {
-    if (!game?.id || !slug) return;
-
-    // one channel for this game
-    const channel = supabase.channel(`game-${game.id}`);
-
-    // When events for this game change, refresh the goal lines list
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "events",
-        filter: `game_id=eq.${game.id}`,
-      },
-      async () => {
-        try {
-          const gl = await loadGoalLines(slug);
-          setGoals(gl);
-        } catch (e) {
-          // ignore – don't kill UI if a transient error happens
-        }
-      }
-    );
-
-    // When the game row updates, update the header score live
-    channel.on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "games",
-        filter: `id=eq.${game.id}`,
-      },
-      (payload) => {
-        const n = payload.new as any;
-        setGame((prev) =>
-          prev
-            ? {
-                ...prev,
-                home_score: n.home_score ?? prev.home_score,
-                away_score: n.away_score ?? prev.away_score,
-              }
-            : prev
-        );
-      }
-    );
-
-    channel.subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [game?.id, slug, loadGoalLines]);
-
-  // ---- derived view --------------------------------------------------------
-
-  const goalsByPeriod = useMemo(() => {
-    const m = new Map<number, GoalLine[]>();
-    for (const g of goals) {
-      const p = g.period ?? 1;
-      if (!m.has(p)) m.set(p, []);
-      m.get(p)!.push(g);
-    }
-    return Array.from(m.entries()).sort((a, b) => a[0] - b[0]);
-  }, [goals]);
-
-  // ---- render --------------------------------------------------------------
-
-  if (loading) return <div className="p-4">Chargement…</div>;
-  if (err) return <div className="p-4 text-red-600">{err}</div>;
-  if (!game) return <div className="p-4">Partie introuvable.</div>;
-
-  const dateStr = new Date(game.game_date).toLocaleDateString("fr-CA", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const dateStr = game
+    ? new Date(game.game_date).toLocaleDateString("fr-CA", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "";
 
   return (
     <div className="p-4 space-y-6">
@@ -192,46 +72,13 @@ export default function GameSummary() {
       <h1 className="text-2xl font-bold">{dateStr}</h1>
 
       <h2 className="text-xl">
-        {game.home_team?.name ?? "Domicile"}{" "}
-        <strong>{game.home_score ?? 0}</strong> vs{" "}
-        <strong>{game.away_score ?? 0}</strong>{" "}
-        {game.away_team?.name ?? "Visiteur"}
+        {game?.home_team?.name ?? "Domicile"}{" "}
+        <strong>{game?.home_goals ?? 0}</strong> vs{" "}
+        <strong>{game?.away_goals ?? 0}</strong>{" "}
+        {game?.away_team?.name ?? "Visiteur"}
       </h2>
 
-      {goalsByPeriod.length === 0 ? (
-        <div className="text-gray-600">Aucun événement pour cette partie.</div>
-      ) : (
-        <div className="space-y-6">
-          {goalsByPeriod.map(([period, lines]) => (
-            <div key={period}>
-              <h3 className="font-semibold mb-2">
-                {period === 1
-                  ? "1re période"
-                  : period === 2
-                  ? "2e période"
-                  : period === 3
-                  ? "3e période"
-                  : `Période ${period}`}
-              </h3>
-              <ul className="list-disc pl-6 space-y-1">
-                {lines.map((g, i) => {
-                  const assists = [g.assist1_name, g.assist2_name]
-                    .filter(Boolean)
-                    .join(", ");
-                  return (
-                    <li key={`${period}-${i}`}>
-                      <span className="text-gray-500 mr-2">{g.time_mmss}</span>
-                      BUT {g.team_short ? `(${g.team_short}) ` : ""}:
-                      {g.scorer_name ? ` ${g.scorer_name}` : " —"}
-                      {assists ? `  ASS : ${assists}` : ""}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* keep the rest of your summary rendering (goal lines) */}
     </div>
   );
 }
