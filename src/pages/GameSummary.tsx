@@ -17,11 +17,10 @@ type Game = {
 type GoalLine = {
   period: number;
   time_mmss: string;
-  team_short: string | null;     // RLR / RLB / RLC
-  scorer_name: string | null;
-  assist1_name: string | null;
-  assist2_name: string | null;
-  slug?: string | null;          // not required, but harmless if present
+  team_short: string | null;     // e.g. RLR / RLB / RLC
+  scorer_name: string | null;    // “BUT : …”
+  assist1_name: string | null;   // first assist (may be null)
+  assist2_name: string | null;   // second assist (may be null)
 };
 
 export default function GameSummary() {
@@ -31,10 +30,9 @@ export default function GameSummary() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // --- loaders ---------------------------------------------------------------
+  // ---- loaders -------------------------------------------------------------
 
-  const loadGame = useCallback(async () => {
-    if (!slug) return;
+  const loadGame = useCallback(async (theSlug: string) => {
     const { data, error } = await supabase
       .from("games")
       .select(`
@@ -46,85 +44,119 @@ export default function GameSummary() {
         home_team:home_team_id(name),
         away_team:away_team_id(name)
       `)
-      .eq("slug", slug)
+      .eq("slug", theSlug)
       .maybeSingle();
+
     if (error) throw error;
     if (!data) throw new Error("Partie introuvable.");
-    setGame(data as Game);
     return data as Game;
-  }, [slug]);
+  }, []);
 
-  const loadGoals = useCallback(async (theSlug?: string) => {
-    const s = theSlug ?? slug;
-    if (!s) return;
+  const loadGoalLines = useCallback(async (theSlug: string) => {
+    // use your view with assists resolved
     const { data, error } = await supabase
-      .from("goal_lines_ext_v2") // <-- your view name (ext_v2)
-      .select(`period, time_mmss, team_short, scorer_name, assist1_name, assist2_name`)
-      .eq("slug", s)
+      .from("goal_lines_ext_v2") // <— make sure the view is named like this
+      .select(`
+        period,
+        time_mmss,
+        team_short,
+        scorer_name,
+        assist1_name,
+        assist2_name
+      `)
+      .eq("slug", theSlug)
       .order("period", { ascending: true })
       .order("time_mmss", { ascending: true });
-    if (error) throw error;
-    setGoals((data ?? []) as GoalLine[]);
-  }, [slug]);
 
-  // --- initial load ----------------------------------------------------------
+    if (error) throw error;
+    return (data ?? []) as GoalLine[];
+  }, []);
+
+  // ---- initial fetch -------------------------------------------------------
 
   useEffect(() => {
     let alive = true;
+
     (async () => {
       try {
-        setLoading(true);
-        setErr(null);
-        const g = await loadGame();
-        await loadGoals(g.slug);
+        if (!slug) throw new Error("Slug manquant.");
+
+        const [g, gl] = await Promise.all([loadGame(slug), loadGoalLines(slug)]);
+
+        if (!alive) return;
+        setGame(g);
+        setGoals(gl);
+        setLoading(false);
       } catch (e: any) {
-        if (alive) setErr(e.message ?? String(e));
-      } finally {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        setErr(e.message ?? "Erreur de chargement");
+        setLoading(false);
       }
     })();
-    return () => { alive = false; };
-  }, [loadGame, loadGoals]);
 
-  // --- realtime subscriptions ------------------------------------------------
+    return () => {
+      alive = false;
+    };
+  }, [slug, loadGame, loadGoalLines]);
+
+  // ---- realtime subscriptions ---------------------------------------------
 
   useEffect(() => {
     if (!game?.id || !slug) return;
 
-    // One channel for both tables
-    const channel = supabase
-      .channel(`game-summary-${game.id}`)
+    // one channel for this game
+    const channel = supabase.channel(`game-${game.id}`);
 
-      // Any change to events for this game -> re-fetch goal lines
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "events", filter: `game_id=eq.${game.id}` },
-        async () => {
-          try { await loadGoals(slug); } catch {}
+    // When events for this game change, refresh the goal lines list
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "events",
+        filter: `game_id=eq.${game.id}`,
+      },
+      async () => {
+        try {
+          const gl = await loadGoalLines(slug);
+          setGoals(gl);
+        } catch (e) {
+          // ignore – don't kill UI if a transient error happens
         }
-      )
+      }
+    );
 
-      // Score changes on the games row -> patch the score
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "games", filter: `id=eq.${game.id}` },
-        (payload) => {
-          setGame((g) => {
-            if (!g) return g;
-            const ns = (payload.new as any).home_score ?? g.home_score;
-            const as = (payload.new as any).away_score ?? g.away_score;
-            return { ...g, home_score: ns, away_score: as };
-          });
-        }
-      )
-      .subscribe();
+    // When the game row updates, update the header score live
+    channel.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "games",
+        filter: `id=eq.${game.id}`,
+      },
+      (payload) => {
+        const n = payload.new as any;
+        setGame((prev) =>
+          prev
+            ? {
+                ...prev,
+                home_score: n.home_score ?? prev.home_score,
+                away_score: n.away_score ?? prev.away_score,
+              }
+            : prev
+        );
+      }
+    );
+
+    channel.subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      channel.unsubscribe();
     };
-  }, [game?.id, slug, loadGoals]);
+  }, [game?.id, slug, loadGoalLines]);
 
-  // --- grouping --------------------------------------------------------------
+  // ---- derived view --------------------------------------------------------
 
   const goalsByPeriod = useMemo(() => {
     const m = new Map<number, GoalLine[]>();
@@ -136,7 +168,7 @@ export default function GameSummary() {
     return Array.from(m.entries()).sort((a, b) => a[0] - b[0]);
   }, [goals]);
 
-  // --- render ----------------------------------------------------------------
+  // ---- render --------------------------------------------------------------
 
   if (loading) return <div className="p-4">Chargement…</div>;
   if (err) return <div className="p-4 text-red-600">{err}</div>;
@@ -173,14 +205,19 @@ export default function GameSummary() {
           {goalsByPeriod.map(([period, lines]) => (
             <div key={period}>
               <h3 className="font-semibold mb-2">
-                {period === 1 ? "1re période"
-                 : period === 2 ? "2e période"
-                 : period === 3 ? "3e période"
-                 : `Période ${period}`}
+                {period === 1
+                  ? "1re période"
+                  : period === 2
+                  ? "2e période"
+                  : period === 3
+                  ? "3e période"
+                  : `Période ${period}`}
               </h3>
               <ul className="list-disc pl-6 space-y-1">
                 {lines.map((g, i) => {
-                  const assists = [g.assist1_name, g.assist2_name].filter(Boolean).join(", ");
+                  const assists = [g.assist1_name, g.assist2_name]
+                    .filter(Boolean)
+                    .join(", ");
                   return (
                     <li key={`${period}-${i}`}>
                       <span className="text-gray-500 mr-2">{g.time_mmss}</span>
