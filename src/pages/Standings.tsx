@@ -20,7 +20,7 @@ export default function Standings() {
     const load = async () => {
       // your view name from the screenshots
       const { data, error } = await supabase
-        .from('standings_current')
+        .from('standings_from_events_v')
         .select('*');
 
       if (!error && data) setRows(data as Row[]);
