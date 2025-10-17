@@ -25,27 +25,23 @@ export default function Games() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data, error } = await supabase
-  .from("games_scores_v2")
-  .select(`
-    slug,
-    game_date,
-    status,
-    home_score,
-    away_score,
-    home_team:home_team_id(name),
-    away_team:away_team_id(name)
-  `)
-  .order("game_date", { ascending: false });
+  let alive = true;
+  (async () => {
+    const { data, error } = await supabase
+      .from("games")
+      .select(`
+        slug, game_date, status,
+        home_team:home_team_id(name),
+        away_team:away_team_id(name)
+      `)
+      .order("game_date", { ascending: false });
 
+    if (!error && alive) setGames(data as GameRow[]);
+    setLoading(false);
+  })();
+  return () => { alive = false; };
+}, []);
 
-      if (!error && alive && data) setGames(data as GameRow[]);
-      setLoading(false);
-    })();
-    return () => { alive = false; };
-  }, []);
 
   if (loading) return <div className="p-4">Loading games…</div>;
 
