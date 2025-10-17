@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
-type Team = { name: string };
 type GameRow = {
   slug: string;
   game_date: string;
@@ -14,36 +13,37 @@ type GameRow = {
   away_score: number | null;
 };
 
-const { data, error } = await supabase
-  .from("games_scores_with_names_v2")
-  .select("slug, game_date, status, home_team_name, away_team_name, home_score, away_score")
-  .order("game_date", { ascending: false });
-
-
 export default function Games() {
   const [games, setGames] = useState<GameRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-  let alive = true;
-  (async () => {
-    const { data, error } = await supabase
-      .from("games")
-      .select(`
-        slug, game_date, status,
-        home_team:home_team_id(name),
-        away_team:away_team_id(name)
-      `)
-      .order("game_date", { ascending: false });
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("games_scores_with_names_v2")
+          .select(
+            "slug, game_date, status, home_team_name, away_team_name, home_score, away_score"
+          )
+          .order("game_date", { ascending: false });
 
-    if (!error && alive) setGames(data as GameRow[]);
-    setLoading(false);
-  })();
-  return () => { alive = false; };
-}, []);
-
+        if (error) throw error;
+        if (alive) setGames((data ?? []) as GameRow[]);
+      } catch (e: any) {
+        if (alive) setErr(e.message ?? "Failed to load games");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   if (loading) return <div className="p-4">Loading games…</div>;
+  if (err) return <div className="p-4 text-red-600">{err}</div>;
 
   return (
     <div className="p-4">
@@ -61,15 +61,20 @@ export default function Games() {
           {games.map((g) => (
             <tr key={g.slug} className="border-b hover:bg-gray-50">
               <td className="p-2">
-                <Link className="text-blue-600 hover:underline" to={`/league/games/${g.slug}`}>
+                <Link
+                  className="text-blue-600 hover:underline"
+                  to={`/league/games/${g.slug}`}
+                >
                   {new Date(g.game_date).toLocaleString()}
                 </Link>
               </td>
               <td className="p-2">
-                {g.home_team?.name ?? "-"} <strong>{g.home_goals}</strong>
+                {g.home_team_name ?? "Home"}{" "}
+                <strong>{g.home_score ?? 0}</strong>
               </td>
               <td className="p-2">
-                {g.away_team?.name ?? "-"} <strong>{g.away_goals}</strong>
+                {g.away_team_name ?? "Away"}{" "}
+                <strong>{g.away_score ?? 0}</strong>
               </td>
               <td className="p-2">{g.status ?? "-"}</td>
             </tr>
