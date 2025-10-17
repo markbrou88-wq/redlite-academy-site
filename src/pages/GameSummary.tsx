@@ -80,11 +80,10 @@ export default function GameSummary() {
       <h1 className="text-2xl font-bold">{dateStr}</h1>
 
       <h2 className="text-xl">
-        {game?.home_team?.name ?? "Domicile"}{" "}
-        <strong>{game?.home_goals ?? 0}</strong> vs{" "}
-        <strong>{game?.away_goals ?? 0}</strong>{" "}
-        {game?.away_team?.name ?? "Visiteur"}
-      </h2>
+  {game.home_team_name ?? "Domicile"} <strong>{game.home_score ?? 0}</strong> vs{" "}
+  <strong>{game.away_score ?? 0}</strong> {game.away_team_name ?? "Visiteur"}
+</h2>
+
 
       {/* keep the rest of your summary rendering (goal lines) */}
     </div>
