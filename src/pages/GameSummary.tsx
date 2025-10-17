@@ -6,13 +6,21 @@ import { supabase } from "../lib/supabase";
 type TeamRow = { name: string };
 type Game = {
   id: string;
+  slug: string;
   game_date: string;
   status: string | null;
-  home_team: TeamRow | null;
-  away_team: TeamRow | null;
-  home_goals: number | null;    // live from view
-  away_goals: number | null;    // live from view
+  home_team_name: string | null;
+  away_team_name: string | null;
+  home_score: number | null;
+  away_score: number | null;
 };
+
+const { data: gameData, error: gErr } = await supabase
+  .from("games_scores_with_names_v2")
+  .select("id, slug, game_date, status, home_team_name, away_team_name, home_score, away_score")
+  .eq("slug", slug!)
+  .maybeSingle();
+
 
 // ... keep your GoalLine + everything else the same ...
 
