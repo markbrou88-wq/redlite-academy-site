@@ -8,11 +8,17 @@ type GameRow = {
   slug: string;
   game_date: string;
   status: string | null;
-  home_goals: number;           // live from events
-  away_goals: number;           // live from events
-  home_team: Team | null;
-  away_team: Team | null;
+  home_team_name: string | null;
+  away_team_name: string | null;
+  home_score: number | null;
+  away_score: number | null;
 };
+
+const { data, error } = await supabase
+  .from("games_scores_with_names_v2")
+  .select("slug, game_date, status, home_team_name, away_team_name, home_score, away_score")
+  .order("game_date", { ascending: false });
+
 
 export default function Games() {
   const [games, setGames] = useState<GameRow[]>([]);
