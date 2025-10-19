@@ -1,83 +1,74 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 type Row = {
-  name: string;   // team name
+  team_id: string;
+  name: string;
   gp: number;
   w: number;
   l: number;
-  otl: number;    // overtime losses (your view uses this)
-  pts: number;
+  otl: number;
   gf: number;
   ga: number;
-  diff: number;   // goal diff in your view
+  diff: number;
+  pts: number;
 };
 
 export default function Standings() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      // your view name from the screenshots
+    let alive = true;
+    (async () => {
       const { data, error } = await supabase
-  .from("standings_by_team_v2")
-  .select(`name, gp, w, l, otl, gf, ga, gd, pts`)
-  .order("pts", { ascending: false });
+        .from("standings_from_events")
+        .select("*")
+        .order("pts", { ascending: false })
+        .order("diff", { ascending: false })
+        .order("gf", { ascending: false });
 
-
-      if (!error && data) setRows(data as Row[]);
-    };
-
-    load();
-
-    // refresh when games change
-    const ch = supabase
-      .channel('standings-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => load())
-      .subscribe();
-
-    return () => supabase.removeChannel(ch);
+      if (!error && alive && data) setRows(data as Row[]);
+      setLoading(false);
+    })();
+    return () => { alive = false; };
   }, []);
 
-  const ptsPct = (r: Row) => (r.gp > 0 ? (r.pts / (r.gp * 2)).toFixed(3) : '0.000');
+  if (loading) return <div className="p-4">Loading standings…</div>;
 
   return (
-    <section className="space-y-6">
-      <h3 className="text-xl font-bold">Standings</h3>
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-left">
-          <thead className="bg-gray-100">
-            <tr className="p-2">
-              <th className="p-2">Team</th>
-              <th className="p-2">GP</th>
-              <th className="p-2">W</th>
-              <th className="p-2">L</th>
-              <th className="p-2">OTL</th>
-              <th className="p-2">GF</th>
-              <th className="p-2">GA</th>
-              <th className="p-2">GD</th>
-              <th className="p-2">PTS</th>
-              <th className="p-2">PTS%</th>
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-4">Standings</h1>
+      <table className="w-full text-left">
+        <thead>
+          <tr className="border-b">
+            <th className="p-2">Team</th>
+            <th className="p-2">GP</th>
+            <th className="p-2">W</th>
+            <th className="p-2">L</th>
+            <th className="p-2">OTL</th>
+            <th className="p-2">GF</th>
+            <th className="p-2">GA</th>
+            <th className="p-2">GD</th>
+            <th className="p-2">PTS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.team_id} className="border-b">
+              <td className="p-2">{r.name}</td>
+              <td className="p-2">{r.gp}</td>
+              <td className="p-2">{r.w}</td>
+              <td className="p-2">{r.l}</td>
+              <td className="p-2">{r.otl}</td>
+              <td className="p-2">{r.gf}</td>
+              <td className="p-2">{r.ga}</td>
+              <td className="p-2">{r.diff}</td>
+              <td className="p-2">{r.pts}</td>
             </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.name} className="border-b">
-                <td className="p-2 font-semibold">{r.name}</td>
-                <td className="p-2">{r.gp}</td>
-                <td className="p-2">{r.w}</td>
-                <td className="p-2">{r.l}</td>
-                <td className="p-2">{r.otl}</td>
-                <td className="p-2">{r.gf}</td>
-                <td className="p-2">{r.ga}</td>
-                <td className="p-2">{r.diff}</td>
-                <td className="p-2">{r.pts}</td>
-                <td className="p-2">{ptsPct(r)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
