@@ -1,84 +1,68 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase'; // adjust if your path is different
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 type Row = {
-  player_id: string;
-  player: string;
-  team: string;
-  gp: number;
-  g: number;
-  a: number;
-  pts: number;
+  player_name: string;
+  team_short: string | null;
+  g: number | null;
+  a: number | null;
+  pts: number | null;
 };
 
 export default function Leaders() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-
     (async () => {
       const { data, error } = await supabase
-        .from('leaders_current')
-        .select('*')
-        .order('pts', { ascending: false })
-        .order('g', { ascending: false })
-        .order('player', { ascending: true });
+        .from("leaders_current")
+        .select("player_name, team_short, g, a, pts")
+        .order("pts", { ascending: false })
+        .order("g", { ascending: false });
 
       if (error) {
-        console.error('leaders_current error', error);
+        if (alive) setErr(error.message);
       } else if (alive) {
         setRows((data ?? []) as Row[]);
       }
-      setLoading(false);
+      if (alive) setLoading(false);
     })();
-
     return () => {
       alive = false;
     };
   }, []);
 
-  return (
-    <section className="space-y-6">
-      <h3 className="text-xl font-bold">Leaders</h3>
+  if (loading) return <div className="p-4">Loading…</div>;
+  if (err) return <div className="p-4 text-red-600">{err}</div>;
 
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-left">
-          <thead className="bg-gray-100">
-            <tr className="p-2">
-              <th className="p-2">Player</th>
-              <th className="p-2">Team</th>
-              <th className="p-2">GP</th>
-              <th className="p-2">G</th>
-              <th className="p-2">A</th>
-              <th className="p-2">PTS</th>
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Leaders</h1>
+      <table className="w-full text-left">
+        <thead>
+          <tr className="border-b">
+            <th className="p-2">Player</th>
+            <th className="p-2">Team</th>
+            <th className="p-2">G</th>
+            <th className="p-2">A</th>
+            <th className="p-2">PTS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b">
+              <td className="p-2">{r.player_name}</td>
+              <td className="p-2">{r.team_short ?? ""}</td>
+              <td className="p-2">{r.g ?? 0}</td>
+              <td className="p-2">{r.a ?? 0}</td>
+              <td className="p-2">{r.pts ?? 0}</td>
             </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td className="p-2" colSpan={6}>Loading…</td>
-              </tr>
-            )}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td className="p-2" colSpan={6}>No data</td>
-              </tr>
-            )}
-            {rows.map((r) => (
-              <tr key={r.player_id} className="border-t">
-                <td className="p-2 font-semibold">{r.player}</td>
-                <td className="p-2">{r.team}</td>
-                <td className="p-2">{r.gp}</td>
-                <td className="p-2">{r.g}</td>
-                <td className="p-2">{r.a}</td>
-                <td className="p-2">{r.pts}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
