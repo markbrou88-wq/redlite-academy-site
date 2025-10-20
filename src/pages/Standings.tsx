@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+port { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Row = {
