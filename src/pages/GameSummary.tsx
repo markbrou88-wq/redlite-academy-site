@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import supabase from "../lib/supabase";
+import { supabase } from "../lib/supabase";
+
 
 type Team = {
   id: string;
