@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
 type GameRow = {
@@ -9,148 +9,146 @@ type GameRow = {
   status: string;
   home_team: string;
   away_team: string;
-  home_score: number | null;
-  away_score: number | null;
+  home_score: number;
+  away_score: number;
 };
 
-type EventRow = {
+type GoalRow = {
+  slug: string;
   period: number;
   time_mmss: string;
-  // your view may expose any of these — accept all gracefully:
-  team?: string;
-  team_short?: string;
-  scorer?: string;
-  scorer_name?: string;
-  player?: string;
-  assist1?: string | null;
-  assist2?: string | null;
-  assist_1?: string | null;
-  assist_2?: string | null;
-  a1_name?: string | null;
-  a2_name?: string | null;
+  team_short: "RLR" | "RLB" | "RLN";
+  team_name: string;
+  scorer_name: string;
+  a1_name: string | null;
+  a2_name: string | null;
 };
 
-const logoMap: Record<string, string> = {
-  "Red Lite Red": "/logos/rlr.png",
-  "Red Lite Blue": "/logos/rlb.png",
-  "Red Lite Black": "/logos/rln.png",
-};
+function logoForShort(key: "RLR" | "RLB" | "RLN" | undefined) {
+  if (!key) return undefined;
+  if (key === "RLR") return "/logos/rlr.png";
+  if (key === "RLB") return "/logos/rlb.png";
+  return "/logos/rln.png";
+}
+
+function shortFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
+  const n = name.toLowerCase();
+  if (n.includes("blue")) return "RLB";
+  if (n.includes("black")) return "RLN";
+  if (n.includes("red")) return "RLR";
+  return undefined;
+}
 
 export default function GameSummary() {
-  const { slug } = useParams();
+  const { slug = "" } = useParams();
   const [game, setGame] = useState<GameRow | null>(null);
-  const [events, setEvents] = useState<EventRow[]>([]);
+  const [goals, setGoals] = useState<GoalRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const { data: gData, error: gErr } = await supabase
-        .from("games_with_names_v2")
-        .select("*")
+      setLoading(true);
+      setErr(null);
+
+      const gameQuery = supabase
+        .from("games_with_names")
+        .select(
+          "id, slug, game_date, status, home_team, away_team, home_score, away_score"
+        )
         .eq("slug", slug)
         .single();
-      if (gErr) {
-        setErr(gErr.message);
-        return;
-      }
-      setGame(gData as GameRow);
 
-      const { data: eData, error: eErr } = await supabase
-        .from("goal_lines_ext_v2")
-        .select("*")
-        .eq("game_slug", slug)
+      const goalsQuery = supabase
+        .from("goal_lines_ext")
+        .select(
+          "slug, period, time_mmss, team_short, team_name, scorer_name, a1_name, a2_name"
+        )
+        .eq("slug", slug)
         .order("period", { ascending: true })
         .order("time_mmss", { ascending: true });
 
-      if (eErr) setErr(eErr.message);
-      else setEvents((eData || []) as EventRow[]);
+      const [{ data: g, error: e1 }, { data: gls, error: e2 }] = await Promise.all([
+        gameQuery,
+        goalsQuery,
+      ]);
+
+      if (e1) setErr(e1.message);
+      else setGame(g as GameRow);
+
+      if (e2) setErr(e2.message);
+      else setGoals((gls || []) as GoalRow[]);
+
+      setLoading(false);
     };
     load();
   }, [slug]);
 
   const grouped = useMemo(() => {
-    const byP: Record<number, EventRow[]> = {};
-    for (const e of events) {
-      const p = Number(e.period || 0);
-      byP[p] = byP[p] || [];
-      byP[p].push(e);
+    const map = new Map<number, GoalRow[]>();
+    for (const r of goals) {
+      if (!map.has(r.period)) map.set(r.period, []);
+      map.get(r.period)!.push(r);
     }
-    return Object.entries(byP)
-      .map(([p, list]) => ({ period: Number(p), list }))
-      .sort((a, b) => a.period - b.period);
-  }, [events]);
+    return [...map.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([period, rows]) => ({ period, rows }));
+  }, [goals]);
 
-  if (!game) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <Link to="/league/games" className="text-blue-600 hover:underline">
-          ← Return to games
-        </Link>
-        <div className="mt-6">Loading game…</div>
-      </div>
-    );
-  }
+  if (err) return <div className="p-6 text-red-600">{err}</div>;
+  if (loading || !game) return <div className="p-6">Loading…</div>;
 
-  const awayLogo = logoMap[game.away_team] || "/logos/rln.png";
-  const homeLogo = logoMap[game.home_team] || "/logos/rln.png";
+  const homeKey = shortFromName(game.home_team);
+  const awayKey = shortFromName(game.away_team);
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto p-6">
       <Link to="/league/games" className="text-blue-600 hover:underline">
-        ← Return to games
+        ← Back to games
       </Link>
 
-      {err && <div className="text-red-600 mt-4">{err}</div>}
-
-      {/* Header with big logos + score */}
-      <div className="flex items-center justify-between my-8">
-        <div className="flex items-center gap-4">
-          <img src={awayLogo} alt={game.away_team} className="w-20 h-20" />
-          <div className="text-xl font-semibold">{game.away_team}</div>
+      <div className="mt-4 flex items-center justify-center gap-8">
+        <div className="flex items-center gap-2 min-w-[220px] justify-end">
+          {awayKey && (
+            <img src={logoForShort(awayKey)} className="h-10 w-auto" alt={game.away_team} />
+          )}
+          <span className="font-semibold">{game.away_team}</span>
         </div>
 
-        <div className="text-3xl font-extrabold">
-          {(game.away_score ?? 0)} – {(game.home_score ?? 0)}
+        <div className="text-2xl font-bold">
+          {game.away_score} <span className="text-gray-400">vs</span> {game.home_score}
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="text-xl font-semibold">{game.home_team}</div>
-          <img src={homeLogo} alt={game.home_team} className="w-20 h-20" />
+        <div className="flex items-center gap-2 min-w-[220px]">
+          {homeKey && (
+            <img src={logoForShort(homeKey)} className="h-10 w-auto" alt={game.home_team} />
+          )}
+          <span className="font-semibold">{game.home_team}</span>
         </div>
       </div>
 
-      {/* Events grouped by period */}
-      {grouped.map(({ period, list }) => (
-        <div key={period} className="mb-6">
-          <h3 className="font-semibold mb-2">{period}e période</h3>
-          <ul className="list-disc pl-6 space-y-1">
-            {list.map((e, idx) => {
-              const team = e.team_short || e.team || "";
-              const scorer = e.scorer_name || e.scorer || e.player || "";
-              const a1 =
-                e.assist_1 ?? e.assist1 ?? e.a1_name ?? undefined ?? null;
-              const a2 =
-                e.assist_2 ?? e.assist2 ?? e.a2_name ?? undefined ?? null;
+      <div className="text-center text-sm text-gray-500 mt-1 capitalize">
+        {new Date(game.game_date).toLocaleString()} — {game.status}
+      </div>
 
-              return (
-                <li key={idx}>
-                  <span className="tabular-nums">{e.time_mmss}</span>{" "}
-                  <b>BUT ({team})</b> : {scorer}
-                  {(a1 || a2) && (
-                    <>
-                      {" "}
-                      <span className="text-gray-600">
-                        ASS : {a1 ?? "—"}
-                        {a2 ? `, ${a2}` : ""}
-                      </span>
-                    </>
-                  )}
+      <div className="mt-8 space-y-6">
+        {grouped.map(({ period, rows }) => (
+          <div key={period}>
+            <h2 className="font-semibold mb-2">{period}e période</h2>
+            <ul className="list-disc ml-6 space-y-1">
+              {rows.map((r, i) => (
+                <li key={`${period}-${i}`}>
+                  <span className="tabular-nums mr-2">{r.time_mmss}</span>
+                  <strong>{r.team_short}</strong>{" "}
+                  BUT : {r.scorer_name}
+                  {r.a1_name ? `  ASS : ${r.a1_name}` : ""}
+                  {r.a2_name ? `, ${r.a2_name}` : ""}
                 </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
