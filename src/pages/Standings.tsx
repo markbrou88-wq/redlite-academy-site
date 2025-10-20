@@ -3,10 +3,8 @@ import { supabase } from "../lib/supabase";
 
 type Row = {
   team_id: string;
-  // different migrations used different names — accept both:
-  team_name?: string;
-  name?: string;
-
+  team_name?: string | null; // preferred
+  name?: string | null;      // fallback if your view exposes 'name'
   gp: number;
   w: number;
   l: number;
@@ -15,86 +13,95 @@ type Row = {
   ga: number;
   gd: number;
   pts: number;
-  pts_pct?: number | null;
+  pts_pct: number | null;
 };
 
-const logoMap: Record<string, string> = {
-  "Red Lite Red": "/logos/rlr.png",
-  "Red Lite Blue": "/logos/rlb.png",
-  "Red Lite Black": "/logos/rln.png",
-};
+function keyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
+  const n = name.toLowerCase();
+  if (n.includes("blue")) return "RLB";
+  if (n.includes("black")) return "RLN";
+  if (n.includes("red")) return "RLR";
+  return undefined;
+}
+
+function TeamBadge({ name }: { name: string }) {
+  const k = keyFromName(name);
+  const src =
+    k === "RLR" ? "/logos/rlr.png" : k === "RLB" ? "/logos/rlb.png" : k === "RLN" ? "/logos/rln.png" : undefined;
+
+  return (
+    <div className="flex items-center gap-2">
+      {src && <img src={src} className="h-6 w-auto" alt={name} />}
+      <span>{name}</span>
+    </div>
+  );
+}
 
 export default function Standings() {
   const [rows, setRows] = useState<Row[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const run = async () => {
+    const load = async () => {
+      setLoading(true);
+      setErr(null);
       const { data, error } = await supabase
         .from("standings_current")
-        .select("*")
-        .order("pts", { ascending: false });
-      if (error) {
-        setErr(error.message);
-      } else {
-        setRows((data || []) as Row[]);
-      }
+        .select(
+          "team_id, team_name, name, gp, w, l, otl, gf, ga, gd, pts, pts_pct"
+        )
+        .order("pts", { ascending: false })
+        .order("gd", { ascending: false });
+
+      if (error) setErr(error.message);
+      else setRows((data || []) as Row[]);
+      setLoading(false);
     };
-    run();
+    load();
   }, []);
+
+  if (err) return <div className="p-6 text-red-600">{err}</div>;
+  if (loading) return <div className="p-6">Loading…</div>;
 
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Standings</h1>
 
-      {err && <div className="text-red-600 mb-3">{err}</div>}
-
-      <table className="w-full border-collapse">
-        <thead className="border-b text-left">
-          <tr>
-            <th className="py-2">Team</th>
-            <th>GP</th>
-            <th>W</th>
-            <th>L</th>
-            <th>OTL</th>
-            <th>GF</th>
-            <th>GA</th>
-            <th>GD</th>
-            <th>PTS</th>
-            <th>PTS%</th>
+      <table className="w-full text-left border-separate border-spacing-y-2">
+        <thead>
+          <tr className="text-sm text-gray-500">
+            <th className="px-3 py-2">Team</th>
+            <th className="px-3 py-2">GP</th>
+            <th className="px-3 py-2">W</th>
+            <th className="px-3 py-2">L</th>
+            <th className="px-3 py-2">OTL</th>
+            <th className="px-3 py-2">GF</th>
+            <th className="px-3 py-2">GA</th>
+            <th className="px-3 py-2">GD</th>
+            <th className="px-3 py-2">PTS</th>
+            <th className="px-3 py-2">PTS%</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => {
-            const teamName = r.team_name || r.name || "Team";
-            const logo = logoMap[teamName] || "/logos/rln.png";
-            const ptsPct =
-              typeof r.pts_pct === "number"
-                ? r.pts_pct.toFixed(3)
-                : // if your view doesn’t have pts_pct, compute quickly (W=2 pts; ties not used here)
-                  ((r.pts ?? 0) / (r.gp > 0 ? r.gp * 2 : 1)).toFixed(3);
-
+            const name = r.team_name ?? r.name ?? "";
             return (
-              <tr key={r.team_id} className="border-b">
-                <td className="py-2">
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={logo}
-                      alt={teamName}
-                      className="w-7 h-7 object-contain"
-                    />
-                    {teamName}
-                  </div>
+              <tr key={r.team_id} className="bg-white rounded shadow-sm">
+                <td className="px-3 py-3">
+                  <TeamBadge name={name} />
                 </td>
-                <td>{r.gp ?? 0}</td>
-                <td>{r.w ?? 0}</td>
-                <td>{r.l ?? 0}</td>
-                <td>{r.otl ?? 0}</td>
-                <td>{r.gf ?? 0}</td>
-                <td>{r.ga ?? 0}</td>
-                <td>{r.gd ?? (r.gf ?? 0) - (r.ga ?? 0)}</td>
-                <td>{r.pts ?? 0}</td>
-                <td>{ptsPct}</td>
+                <td className="px-3 py-3">{r.gp}</td>
+                <td className="px-3 py-3">{r.w}</td>
+                <td className="px-3 py-3">{r.l}</td>
+                <td className="px-3 py-3">{r.otl}</td>
+                <td className="px-3 py-3">{r.gf}</td>
+                <td className="px-3 py-3">{r.ga}</td>
+                <td className="px-3 py-3">{r.gd}</td>
+                <td className="px-3 py-3">{r.pts}</td>
+                <td className="px-3 py-3">
+                  {r.pts_pct != null ? r.pts_pct.toFixed(3) : "-"}
+                </td>
               </tr>
             );
           })}
