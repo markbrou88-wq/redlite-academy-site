@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Row = {
-  team_id: string;
-  team_name?: string | null; // preferred
-  name?: string | null;      // fallback if your view exposes 'name'
+  team_id: string;          // "RLR" | "RLB" | "RLN"
+  team_name: string | null; // full name from the view
+  short_name: string | null;
   gp: number;
   w: number;
   l: number;
@@ -27,7 +27,13 @@ function keyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
 function TeamBadge({ name }: { name: string }) {
   const k = keyFromName(name);
   const src =
-    k === "RLR" ? "/logos/rlr.png" : k === "RLB" ? "/logos/rlb.png" : k === "RLN" ? "/logos/rln.png" : undefined;
+    k === "RLR"
+      ? "/logos/rlr.png"
+      : k === "RLB"
+      ? "/logos/rlb.png"
+      : k === "RLN"
+      ? "/logos/rln.png"
+      : undefined;
 
   return (
     <div className="flex items-center gap-2">
@@ -43,13 +49,14 @@ export default function Standings() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
+    (async () => {
       setErr(null);
+      setLoading(true);
+
       const { data, error } = await supabase
         .from("standings_current")
         .select(
-          "team_id, team_name, name, gp, w, l, otl, gf, ga, gd, pts, pts_pct"
+          "team_id, team_name, short_name, gp, w, l, otl, gf, ga, gd, pts, pts_pct"
         )
         .order("pts", { ascending: false })
         .order("gd", { ascending: false });
@@ -57,8 +64,7 @@ export default function Standings() {
       if (error) setErr(error.message);
       else setRows((data || []) as Row[]);
       setLoading(false);
-    };
-    load();
+    })();
   }, []);
 
   if (err) return <div className="p-6 text-red-600">{err}</div>;
@@ -85,7 +91,7 @@ export default function Standings() {
         </thead>
         <tbody>
           {rows.map((r) => {
-            const name = r.team_name ?? r.name ?? "";
+            const name = r.team_name ?? r.short_name ?? r.team_id;
             return (
               <tr key={r.team_id} className="bg-white rounded shadow-sm">
                 <td className="px-3 py-3">
