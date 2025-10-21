@@ -38,7 +38,7 @@ export default function Leaders() {
   if (err) return <div className="p-4 text-red-600">{err}</div>;
 
   return (
-    <div className="p-4">
+    <div className="p-4 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Leaders</h1>
       <table className="w-full text-left">
         <thead>
