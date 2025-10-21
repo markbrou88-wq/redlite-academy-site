@@ -6,14 +6,13 @@ type GameRow = {
   id: string;
   slug: string;
   game_date: string; // ISO
-  status: string; // "final" | "scheduled" | etc
+  status: string;    // "final" | "scheduled" | etc
   home_team: string;
   away_team: string;
   home_score: number;
   away_score: number;
 };
 
-// Map team name to a short key we use for logos
 function teamKeyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
   const n = name.toLowerCase();
   if (n.includes("blue")) return "RLB";
@@ -47,20 +46,20 @@ export default function Games() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
+    (async () => {
       setErr(null);
+      setLoading(true);
       const { data, error } = await supabase
         .from("games_with_names")
         .select(
           "id, slug, game_date, status, home_team, away_team, home_score, away_score"
         )
         .order("game_date", { ascending: false });
+
       if (error) setErr(error.message);
       else setRows((data || []) as GameRow[]);
       setLoading(false);
-    };
-    load();
+    })();
   }, []);
 
   if (err) return <div className="p-6 text-red-600">{err}</div>;
