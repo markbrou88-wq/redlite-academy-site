@@ -16,7 +16,6 @@ export default function Leaders() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    let alive = true;
     (async () => {
       const { data, error } = await supabase
         .from("leaders_current")
@@ -26,23 +25,20 @@ export default function Leaders() {
         .limit(100);
 
       if (error) setErr(error.message);
-      else if (alive && data) setRows(data as Row[]);
+      else setRows((data ?? []) as Row[]);
       setLoading(false);
     })();
-    return () => {
-      alive = false;
-    };
   }, []);
 
   if (loading) return <div className="p-4">Loading leaders…</div>;
   if (err) return <div className="p-4 text-red-600">{err}</div>;
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Leaders</h1>
       <table className="w-full text-left">
         <thead>
-          <tr className="border-b">
+          <tr className="border-b text-gray-600 text-sm">
             <th className="p-2">Player</th>
             <th className="p-2">Team</th>
             <th className="p-2">G</th>
