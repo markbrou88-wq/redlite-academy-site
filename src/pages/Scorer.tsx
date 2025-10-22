@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-/** DB shapes (text IDs, short_name like RLR/RLB/RLN) */
+/** DB shapes (strings are fine; Supabase will coerce UUID/text underneath) */
 type Team = { id: string; name: string; short_name: string | null };
 type Player = { id: string; name: string; team_id: string };
 
@@ -9,7 +9,7 @@ type Game = {
   id: string;
   slug: string;
   game_date: string;
-  status: "scheduled" | "Final";
+  status: "scheduled" | "final";
   home_team_id: string;
   away_team_id: string;
   home_team?: Team | null;
@@ -30,6 +30,7 @@ type GoalLine = {
   key: string; // period|time|team_id
   period: number;
   time_mmss: string;
+  team_id: string;
   team_short: string;
   team_name: string;
   goal?: EventRow;
@@ -37,22 +38,24 @@ type GoalLine = {
 };
 
 export default function Scorer() {
+  // auth id (used for created_by)
   const [userId, setUserId] = useState<string>("");
 
-  /** dropdowns / data */
+  // master lists
   const [games, setGames] = useState<Game[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+
+  // selection / UI state
   const [selectedGameId, setSelectedGameId] = useState<string>("");
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
-  const [players, setPlayers] = useState<Player[]>([]);
+  // create-game form
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [awayId, setAwayId] = useState("");
+  const [homeId, setHomeId] = useState("");
 
-  /** create-game form */
-  const [date, setDate] = useState<string>("");
-  const [time, setTime] = useState<string>("");
-  const [awayId, setAwayId] = useState<string>("");
-  const [homeId, setHomeId] = useState<string>("");
-
-  /** goal form */
+  // goal form
   const [teamSide, setTeamSide] = useState<"away" | "home">("away");
   const [period, setPeriod] = useState<number>(1);
   const [mmss, setMMSS] = useState<string>("00:00");
@@ -60,11 +63,51 @@ export default function Scorer() {
   const [assist1Id, setAssist1Id] = useState<string>("");
   const [assist2Id, setAssist2Id] = useState<string>("");
 
-  /** events (raw) and grouped goal lines */
+  // events for current game
   const [events, setEvents] = useState<EventRow[]>([]);
-  const [msg, setMsg] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
 
-  /** helpers */
+  // -------- helpers --------
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) setUserId(data.user.id);
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("games")
+        .select(`
+          id, slug, game_date, status, home_team_id, away_team_id,
+          home_team:home_team_id ( id, name, short_name ),
+          away_team:away_team_id ( id, name, short_name )
+        `)
+        .order("game_date", { ascending: false })
+        .limit(150);
+      if (!error && data) setGames(data as any);
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase
+        .from("players")
+        .select("id, name, team_id")
+        .order("name");
+      if (!error && data) setPlayers(data as any);
+    })();
+  }, []);
+
+  useEffect(() => {
+    const g = games.find((x) => x.id === selectedGameId) ?? null;
+    setSelectedGame(g);
+    if (g) void loadEventsForGame(g.id);
+    else setEvents([]);
+  }, [selectedGameId, games]);
+
   const selectedTeamId = useMemo(() => {
     if (!selectedGame) return "";
     return teamSide === "away" ? selectedGame.away_team_id : selectedGame.home_team_id;
@@ -75,6 +118,7 @@ export default function Scorer() {
     [players, selectedTeamId]
   );
 
+  /** Combine individual 'goal'/'assist' events into lines (goal + its assists) */
   const goalLines: GoalLine[] = useMemo(() => {
     const map = new Map<string, GoalLine>();
     for (const e of events) {
@@ -85,6 +129,7 @@ export default function Scorer() {
           key,
           period: e.period,
           time_mmss: e.time_mmss,
+          team_id: teamId,
           team_short: e.team?.short_name ?? "",
           team_name: e.team?.name ?? "",
           goal: undefined,
@@ -93,54 +138,14 @@ export default function Scorer() {
       }
       const node = map.get(key)!;
       if (e.event === "goal") node.goal = e;
-      else if (e.event === "assist") node.assists.push(e);
+      else node.assists.push(e);
     }
-    return [...map.values()].sort((a, b) => {
-      if (a.period !== b.period) return a.period - b.period;
-      return a.time_mmss.localeCompare(b.time_mmss);
-    });
+    return [...map.values()].sort((a, b) =>
+      a.period === b.period ? a.time_mmss.localeCompare(b.time_mmss) : a.period - b.period
+    );
   }, [events]);
 
-  /** effects */
-  useEffect(() => {
-    (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (u?.user) setUserId(u.user.id);
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("games")
-        .select(
-          `
-          id, slug, game_date, status, home_team_id, away_team_id,
-          home_team:home_team_id ( id, name, short_name ),
-          away_team:away_team_id ( id, name, short_name )
-        `
-        )
-        .order("game_date", { ascending: false })
-        .limit(150);
-      if (!error && data) setGames(data as any);
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase.from("players").select("id, name, team_id").order("name");
-      if (!error && data) setPlayers(data as any);
-    })();
-  }, []);
-
-  useEffect(() => {
-    const g = games.find((x) => x.id === selectedGameId) ?? null;
-    setSelectedGame(g);
-    if (g) loadEventsForGame(g.id);
-    else setEvents([]);
-  }, [selectedGameId, games]);
-
-  /** loaders */
+  // -------- loaders / mutators --------
   async function loadEventsForGame(gameId: string) {
     const { data, error } = await supabase
       .from("events")
@@ -152,42 +157,41 @@ export default function Scorer() {
       .eq("game_id", gameId)
       .order("period", { ascending: true })
       .order("time_mmss", { ascending: true });
+
     if (!error) setEvents((data ?? []) as any);
   }
 
   async function refreshGamesAndSelect(id: string) {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("games")
-      .select(
-        `
+      .select(`
         id, slug, game_date, status, home_team_id, away_team_id,
         home_team:home_team_id ( id, name, short_name ),
         away_team:away_team_id ( id, name, short_name )
-      `
-      )
+      `)
       .order("game_date", { ascending: false })
       .limit(150);
-    if (!error && data) {
-      setGames(data as any);
-      setSelectedGameId(id);
-    }
+    setGames((data ?? []) as any);
+    setSelectedGameId(id);
   }
 
-  /** create game */
+  // -- Create game
   async function createGame() {
     try {
+      setBusy(true);
       setMsg("");
       if (!date || !time || !awayId || !homeId) {
         setMsg("Choose date, time, away & home teams.");
         return;
       }
       const dt = new Date(`${date}T${time}`);
-
-      // build slug: {AWY}_vs_{HOM}_{YYYY-MM-DD}_game_1
+      // slug like RLB_vs_RLN_YYYY-MM-DD_game_1
       const awayShort =
-        (await supabase.from("teams").select("short_name").eq("id", awayId).single()).data?.short_name || "AWY";
+        (await supabase.from("teams").select("short_name").eq("id", awayId).single()).data
+          ?.short_name ?? "AWY";
       const homeShort =
-        (await supabase.from("teams").select("short_name").eq("id", homeId).single()).data?.short_name || "HOM";
+        (await supabase.from("teams").select("short_name").eq("id", homeId).single()).data
+          ?.short_name ?? "HOM";
       const yyyy = dt.getFullYear();
       const mm = `${dt.getMonth() + 1}`.padStart(2, "0");
       const dd = `${dt.getDate()}`.padStart(2, "0");
@@ -211,35 +215,46 @@ export default function Scorer() {
       await refreshGamesAndSelect(data!.id);
     } catch (e: any) {
       setMsg(e.message ?? "Create failed");
+    } finally {
+      setBusy(false);
     }
   }
 
-  /** toggle final/scheduled */
+  // -- Toggle FINAL / scheduled
   async function toggleFinal() {
     if (!selectedGame) return;
-    const newStatus = selectedGame.status === "Final" ? "scheduled" : "Final";
-    const { error } = await supabase.rpc("set_game_status", {
-      p_game_id: selectedGame.id,
-      p_status: newStatus,
-    });
+    const next = selectedGame.status === "final" ? "scheduled" : "final";
+    setBusy(true);
+    const { error } = await supabase
+      .from("games")
+      .update({ status: next })
+      .eq("id", selectedGame.id);
+    setBusy(false);
     if (!error) {
-      // reflect locally
-      setGames((gs) => gs.map((g) => (g.id === selectedGame.id ? { ...g, status: newStatus } : g)));
-      setSelectedGame((g) => (g ? { ...g, status: newStatus } : g));
-      setMsg(newStatus === "Final" ? "Game marked FINAL" : "Game set to scheduled");
-    } else {
-      setMsg(error.message);
+      setGames((prev) =>
+        prev.map((g) => (g.id === selectedGame.id ? { ...g, status: next } : g))
+      );
+      setMsg(next === "final" ? "Game marked FINAL" : "Game reopened");
     }
   }
 
-  /** save goal (plus optional assists at the same timestamp) */
+  // -- Save goal (+ assists)
   async function saveGoal() {
     try {
+      setBusy(true);
       setMsg("");
-      if (!selectedGame) return setMsg("Pick a game first.");
-      if (!scorerId) return setMsg("Pick a scorer.");
-      if (!/^\d{2}:\d{2}$/.test(mmss)) return setMsg("Time must be MM:SS");
-
+      if (!selectedGame) {
+        setMsg("Pick a game first.");
+        return;
+      }
+      if (!scorerId) {
+        setMsg("Pick a scorer.");
+        return;
+      }
+      if (!/^\d{2}:\d{2}$/.test(mmss)) {
+        setMsg("Time must be MM:SS");
+        return;
+      }
       const base = {
         game_id: selectedGame.id,
         team_id: selectedTeamId,
@@ -248,15 +263,11 @@ export default function Scorer() {
         created_by: userId || null,
       };
 
-      // goal
       const { error: gErr } = await supabase
         .from("events")
-        .insert([{ ...base, event: "goal", player_id: scorerId }])
-        .select("id")
-        .single();
+        .insert([{ ...base, event: "goal", player_id: scorerId }]);
       if (gErr) throw gErr;
 
-      // assists (optional)
       const assists: any[] = [];
       if (assist1Id) assists.push({ ...base, event: "assist", player_id: assist1Id });
       if (assist2Id) assists.push({ ...base, event: "assist", player_id: assist2Id });
@@ -265,51 +276,84 @@ export default function Scorer() {
         if (aErr) throw aErr;
       }
 
-      setMsg("Saved goal.");
       setAssist1Id("");
       setAssist2Id("");
-
-      // refresh events and scores (trigger already recomputed DB score)
+      setMsg("Saved goal.");
       await loadEventsForGame(selectedGame.id);
-      await refreshGamesAndSelect(selectedGame.id);
     } catch (e: any) {
       setMsg(e.message ?? "Save failed");
+    } finally {
+      setBusy(false);
     }
   }
 
-  /** delete a grouped goal line (goal + all assists at same time/period/team) */
+  // -- Delete a goal line (goal + all assists at the same time/team/period)
   async function deleteGoalLine(gl: GoalLine) {
     if (!selectedGame) return;
-    if (!window.confirm(`Delete goal at ${gl.time_mmss} (period ${gl.period}) for ${gl.team_name}?`)) return;
+    if (
+      !window.confirm(
+        `Delete goal at ${gl.time_mmss} (P${gl.period}) for ${gl.team_name}?`
+      )
+    )
+      return;
 
-    const ids: string[] = [];
-    if (gl.goal?.id) ids.push(gl.goal.id);
-    for (const a of gl.assists) if (a.id) ids.push(a.id);
-    if (!ids.length) return;
+    try {
+      setBusy(true);
+      // Load ids by pattern (more reliable than relying on the cached ids)
+      const { data, error } = await supabase
+        .from("events")
+        .select("id")
+        .eq("game_id", selectedGame.id)
+        .eq("period", gl.period)
+        .eq("time_mmss", gl.time_mmss)
+        .eq("team_id", gl.team_id);
 
-    const { error } = await supabase.from("events").delete().in("id", ids);
-    if (!error) {
+      if (error) throw error;
+      const ids = (data ?? []).map((r: any) => r.id);
+      if (!ids.length) return;
+
+      const { error: delErr } = await supabase
+        .from("events")
+        .delete()
+        .in("id", ids);
+
+      if (delErr) throw delErr;
+
       await loadEventsForGame(selectedGame.id);
-      await refreshGamesAndSelect(selectedGame.id); // update the live score in the header & games view
+    } catch (e: any) {
+      setMsg(e.message ?? "Delete failed");
+    } finally {
+      setBusy(false);
     }
   }
 
+  // ---------- UI ----------
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
       <h1 className="text-2xl font-bold">Scorer</h1>
-      {msg && <div className="text-sm">{msg}</div>}
+      {!!msg && <div className="text-sm">{msg}</div>}
 
-      {/* Create new game */}
+      {/* Create game */}
       <section className="space-y-3 border rounded p-4">
         <h2 className="font-semibold">New game</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <label className="block">
             <div>Date</div>
-            <input type="date" className="border p-2 w-full" value={date} onChange={(e) => setDate(e.target.value)} />
+            <input
+              type="date"
+              className="border p-2 w-full"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
           </label>
           <label className="block">
             <div>Time</div>
-            <input type="time" className="border p-2 w-full" value={time} onChange={(e) => setTime(e.target.value)} />
+            <input
+              type="time"
+              className="border p-2 w-full"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+            />
           </label>
           <label className="block">
             <div>Away team</div>
@@ -320,12 +364,16 @@ export default function Scorer() {
             <TeamSelect value={homeId} onChange={setHomeId} />
           </label>
         </div>
-        <button className="bg-black text-white px-4 py-2 rounded" onClick={createGame}>
+        <button
+          className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
+          onClick={createGame}
+          disabled={busy}
+        >
           Create game
         </button>
       </section>
 
-      {/* Choose game / status toggle */}
+      {/* Pick game & toggle final */}
       <section className="space-y-3">
         <label className="block">
           <div className="font-semibold">Game (slug)</div>
@@ -345,9 +393,16 @@ export default function Scorer() {
 
         {!!selectedGame && (
           <div className="text-sm">
-            Status: <span className="font-semibold">{selectedGame.status}</span>{" "}
-            <button className="underline ml-2" onClick={toggleFinal}>
-              {selectedGame.status === "Final" ? "Mark SCHEDULED" : "Mark FINAL"}
+            Status:{" "}
+            <span className="font-semibold capitalize">
+              {selectedGame.status}
+            </span>
+            <button
+              className="underline ml-3 disabled:opacity-50"
+              onClick={toggleFinal}
+              disabled={busy}
+            >
+              {selectedGame.status === "final" ? "Re-open" : "Mark FINAL"}
             </button>
           </div>
         )}
@@ -358,11 +413,19 @@ export default function Scorer() {
         <section className="space-y-4">
           <div className="flex gap-6 items-center">
             <label className="flex items-center gap-2">
-              <input type="radio" checked={teamSide === "away"} onChange={() => setTeamSide("away")} />
+              <input
+                type="radio"
+                checked={teamSide === "away"}
+                onChange={() => setTeamSide("away")}
+              />
               <span>{selectedGame.away_team?.short_name || "AWAY"}</span>
             </label>
             <label className="flex items-center gap-2">
-              <input type="radio" checked={teamSide === "home"} onChange={() => setTeamSide("home")} />
+              <input
+                type="radio"
+                checked={teamSide === "home"}
+                onChange={() => setTeamSide("home")}
+              />
               <span>{selectedGame.home_team?.short_name || "HOME"}</span>
             </label>
           </div>
@@ -372,9 +435,9 @@ export default function Scorer() {
               <div>Period</div>
               <input
                 type="number"
-                className="border p-2 w-full"
                 min={1}
                 max={5}
+                className="border p-2 w-full"
                 value={period}
                 onChange={(e) => setPeriod(parseInt(e.target.value || "1"))}
               />
@@ -383,15 +446,19 @@ export default function Scorer() {
               <div>Time (MM:SS)</div>
               <input
                 type="text"
+                placeholder="00:00"
                 className="border p-2 w-full"
                 value={mmss}
                 onChange={(e) => setMMSS(e.target.value)}
-                placeholder="00:00"
               />
             </label>
             <label className="block md:col-span-3">
               <div>Scorer</div>
-              <select className="border p-2 w-full" value={scorerId} onChange={(e) => setScorerId(e.target.value)}>
+              <select
+                className="border p-2 w-full"
+                value={scorerId}
+                onChange={(e) => setScorerId(e.target.value)}
+              >
                 <option value="">-- choose --</option>
                 {teamPlayers.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -405,7 +472,11 @@ export default function Scorer() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label className="block">
               <div>Assist 1 (optional)</div>
-              <select className="border p-2 w-full" value={assist1Id} onChange={(e) => setAssist1Id(e.target.value)}>
+              <select
+                className="border p-2 w-full"
+                value={assist1Id}
+                onChange={(e) => setAssist1Id(e.target.value)}
+              >
                 <option value="">-- none --</option>
                 {teamPlayers.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -417,7 +488,11 @@ export default function Scorer() {
 
             <label className="block">
               <div>Assist 2 (optional)</div>
-              <select className="border p-2 w-full" value={assist2Id} onChange={(e) => setAssist2Id(e.target.value)}>
+              <select
+                className="border p-2 w-full"
+                value={assist2Id}
+                onChange={(e) => setAssist2Id(e.target.value)}
+              >
                 <option value="">-- none --</option>
                 {teamPlayers.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -428,21 +503,26 @@ export default function Scorer() {
             </label>
           </div>
 
-          <button className="bg-black text-white px-4 py-2 rounded" onClick={saveGoal}>
+          <button
+            className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
+            onClick={saveGoal}
+            disabled={busy}
+          >
             Save goal
           </button>
         </section>
       )}
 
-      {/* Current goals (grouped) */}
+      {/* Current goals with trash */}
       {!!selectedGame && (
         <section className="space-y-2">
           <h2 className="font-semibold">
-            Current goals — {selectedGame.away_team?.name} vs {selectedGame.home_team?.name}
+            Current goals — {selectedGame.away_team?.name} vs{" "}
+            {selectedGame.home_team?.name}
           </h2>
 
           {goalLines.length === 0 ? (
-            <div className="text-sm text-gray-600">No goals saved yet for this game.</div>
+            <div className="text-sm text-gray-600">No goals saved yet.</div>
           ) : (
             <table className="min-w-full text-sm border rounded">
               <thead className="bg-gray-50 text-left">
@@ -451,7 +531,7 @@ export default function Scorer() {
                   <th className="p-2 w-24">Time</th>
                   <th className="p-2 w-20">Team</th>
                   <th className="p-2">Scorer / Assists</th>
-                  <th className="p-2 w-12"></th>
+                  <th className="p-2 w-12" />
                 </tr>
               </thead>
               <tbody>
@@ -464,15 +544,21 @@ export default function Scorer() {
                       {gl.goal?.player?.name || "—"}
                       {gl.assists.length > 0 && (
                         <span className="text-gray-600">
-                          {"  "}ASS: {gl.assists.map((a) => a.player?.name).filter(Boolean).join(", ")}
+                          {" "}
+                          ASS:{" "}
+                          {gl.assists
+                            .map((a) => a.player?.name)
+                            .filter(Boolean)
+                            .join(", ")}
                         </span>
                       )}
                     </td>
                     <td className="p-2 text-right">
                       <button
                         title="Delete this goal (and its assists)"
-                        className="text-red-600 hover:underline"
+                        className="text-red-600 hover:underline disabled:opacity-50"
                         onClick={() => deleteGoalLine(gl)}
+                        disabled={busy}
                       >
                         🗑
                       </button>
@@ -488,17 +574,30 @@ export default function Scorer() {
   );
 }
 
-/** Small team selector */
-function TeamSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/** Small team picker */
+function TeamSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
   const [teams, setTeams] = useState<Team[]>([]);
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("teams").select("id, name, short_name").order("name");
+      const { data } = await supabase
+        .from("teams")
+        .select("id, name, short_name")
+        .order("name");
       setTeams((data ?? []) as any);
     })();
   }, []);
   return (
-    <select className="border p-2 w-full" value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      className="border p-2 w-full"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       <option value="">-- choose --</option>
       {teams.map((t) => (
         <option key={t.id} value={t.id}>
