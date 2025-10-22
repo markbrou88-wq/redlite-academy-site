@@ -1,20 +1,21 @@
+// src/pages/Games.tsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
 type GameRow = {
-  id: string;            // text id like 'game_001'
+  id: string;
   slug: string;
-  game_date: string;
-  status: string;
+  game_date: string; // ISO
+  status: string;    // "final" | "scheduled"
   home_team: string;
   away_team: string;
-  home_score: number;
-  away_score: number;
+  home_score: number | null;
+  away_score: number | null;
 };
 
 function teamKeyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
-  const n = name.toLowerCase();
+  const n = (name || "").toLowerCase();
   if (n.includes("blue")) return "RLB";
   if (n.includes("black")) return "RLN";
   if (n.includes("red")) return "RLR";
@@ -36,8 +37,9 @@ function TeamWithLogo({ name }: { name: string }) {
 
 export default function Games() {
   const [rows, setRows] = useState<GameRow[]>([]);
-  const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -51,17 +53,25 @@ export default function Games() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function deleteGame(id: string, slug: string) {
-    if (!window.confirm(`Delete game "${slug}" and all its events?`)) return;
-    // thanks to ON DELETE CASCADE the events go away too
-    const { error } = await supabase.from("games").delete().eq("id", id);
-    if (error) {
-      alert(error.message);
-      return;
+    if (!confirm(`Delete game "${slug}"? This also deletes its events.`)) return;
+    setBusyId(id);
+    try {
+      // delete events first (safer/cleaner)
+      await supabase.from("events").delete().eq("game_id", id);
+      // then delete game
+      const { error } = await supabase.from("games").delete().eq("id", id);
+      if (error) throw error;
+      await load();
+    } catch (e: any) {
+      alert(e.message ?? "Delete failed (RLS?). You must be the creator of this game to delete it.");
+    } finally {
+      setBusyId(null);
     }
-    await load();
   }
 
   if (err) return <div className="p-6 text-red-600">{err}</div>;
@@ -85,11 +95,14 @@ export default function Games() {
         <tbody>
           {rows.map((g) => {
             const d = new Date(g.game_date);
-            const score = `${g.home_score}–${g.away_score}`;
+            const score = `${g.home_score ?? 0}–${g.away_score ?? 0}`;
             return (
               <tr key={g.id} className="bg-white rounded shadow-sm">
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <Link to={`/league/games/${g.slug}`} className="text-blue-600 hover:underline">
+                  <Link
+                    to={`/league/games/${g.slug}`}
+                    className="text-blue-600 hover:underline"
+                  >
                     {d.toLocaleString(undefined, {
                       year: "numeric",
                       month: "short",
@@ -104,7 +117,12 @@ export default function Games() {
                 <td className="px-3 py-3 font-medium">{score}</td>
                 <td className="px-3 py-3 capitalize">{g.status}</td>
                 <td className="px-3 py-3 text-right">
-                  <button className="text-red-600 hover:underline" onClick={() => deleteGame(g.id, g.slug)}>
+                  <button
+                    className="text-red-600 hover:underline disabled:opacity-50"
+                    disabled={busyId === g.id}
+                    onClick={() => deleteGame(g.id, g.slug)}
+                    title="Delete game"
+                  >
                     🗑
                   </button>
                 </td>
