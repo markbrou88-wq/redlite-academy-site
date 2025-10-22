@@ -6,7 +6,7 @@ type GameRow = {
   id: string;
   slug: string;
   game_date: string; // ISO
-  status: string;    // "final" | "scheduled" | etc
+  status: "scheduled" | "final";
   home_team: string;
   away_team: string;
   home_score: number;
@@ -20,7 +20,6 @@ function teamKeyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
   if (n.includes("red")) return "RLR";
   return undefined;
 }
-
 function TeamWithLogo({ name }: { name: string }) {
   const key = teamKeyFromName(name);
   const src =
@@ -44,23 +43,54 @@ export default function Games() {
   const [rows, setRows] = useState<GameRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setErr(null);
+    const { data, error } = await supabase
+      .from("games_with_names")
+      .select(
+        "id, slug, game_date, status, home_team, away_team, home_score, away_score"
+      )
+      .order("game_date", { ascending: false });
+    if (error) setErr(error.message);
+    else setRows((data || []) as GameRow[]);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    (async () => {
-      setErr(null);
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("games_with_names")
-        .select(
-          "id, slug, game_date, status, home_team, away_team, home_score, away_score"
-        )
-        .order("game_date", { ascending: false });
-
-      if (error) setErr(error.message);
-      else setRows((data || []) as GameRow[]);
-      setLoading(false);
-    })();
+    void load();
   }, []);
+
+  async function deleteGame(game: GameRow) {
+    if (
+      !window.confirm(
+        `Delete ${game.away_team} @ ${game.home_team} (${new Date(
+          game.game_date
+        ).toLocaleString()}) ?\n\nAll events for this game will be deleted.`
+      )
+    )
+      return;
+    try {
+      setBusyId(game.id);
+      // 1) delete events
+      const { error: e1 } = await supabase
+        .from("events")
+        .delete()
+        .eq("game_id", game.id);
+      if (e1) throw e1;
+      // 2) delete game
+      const { error: e2 } = await supabase.from("games").delete().eq("id", game.id);
+      if (e2) throw e2;
+      // 3) refresh
+      await load();
+    } catch (e: any) {
+      alert(e.message ?? "Failed to delete game");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   if (err) return <div className="p-6 text-red-600">{err}</div>;
   if (loading) return <div className="p-6">Loading…</div>;
@@ -77,6 +107,7 @@ export default function Games() {
             <th className="px-3 py-2">Away</th>
             <th className="px-3 py-2">Score</th>
             <th className="px-3 py-2">Status</th>
+            <th className="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
@@ -107,6 +138,16 @@ export default function Games() {
                 </td>
                 <td className="px-3 py-3 font-medium">{score}</td>
                 <td className="px-3 py-3 capitalize">{g.status}</td>
+                <td className="px-3 py-3 text-right">
+                  <button
+                    title="Delete this game"
+                    className="text-red-600 hover:underline disabled:opacity-50"
+                    onClick={() => deleteGame(g)}
+                    disabled={busyId === g.id}
+                  >
+                    🗑
+                  </button>
+                </td>
               </tr>
             );
           })}
