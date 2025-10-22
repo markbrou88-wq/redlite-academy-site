@@ -47,41 +47,32 @@ export default function GameSummary() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       setLoading(true);
       setErr(null);
 
-      const gameQuery = supabase
+      const gq = supabase
         .from("games_with_names")
-        .select(
-          "id, slug, game_date, status, home_team, away_team, home_score, away_score"
-        )
+        .select("id, slug, game_date, status, home_team, away_team, home_score, away_score")
         .eq("slug", slug)
         .single();
 
-      const goalsQuery = supabase
+      const glq = supabase
         .from("goal_lines_ext")
-        .select(
-          "slug, period, time_mmss, team_short, team_name, scorer_name, a1_name, a2_name"
-        )
+        .select("slug, period, time_mmss, team_short, team_name, scorer_name, a1_name, a2_name")
         .eq("slug", slug)
         .order("period", { ascending: true })
         .order("time_mmss", { ascending: true });
 
-      const [{ data: g, error: e1 }, { data: gls, error: e2 }] = await Promise.all([
-        gameQuery,
-        goalsQuery,
-      ]);
-
+      const [{ data: g, error: e1 }, { data: gls, error: e2 }] = await Promise.all([gq, glq]);
       if (e1) setErr(e1.message);
       else setGame(g as GameRow);
 
       if (e2) setErr(e2.message);
-      else setGoals((gls || []) as GoalRow[]);
+      else setGoals((gls ?? []) as GoalRow[]);
 
       setLoading(false);
-    };
-    load();
+    })();
   }, [slug]);
 
   const grouped = useMemo(() => {
@@ -109,9 +100,7 @@ export default function GameSummary() {
 
       <div className="mt-4 flex items-center justify-center gap-8">
         <div className="flex items-center gap-2 min-w-[220px] justify-end">
-          {awayKey && (
-            <img src={logoForShort(awayKey)} className="h-10 w-auto" alt={game.away_team} />
-          )}
+          {awayKey && <img src={logoForShort(awayKey)!} className="h-10 w-auto" alt={game.away_team} />}
           <span className="font-semibold">{game.away_team}</span>
         </div>
 
@@ -120,9 +109,7 @@ export default function GameSummary() {
         </div>
 
         <div className="flex items-center gap-2 min-w-[220px]">
-          {homeKey && (
-            <img src={logoForShort(homeKey)} className="h-10 w-auto" alt={game.home_team} />
-          )}
+          {homeKey && <img src={logoForShort(homeKey)!} className="h-10 w-auto" alt={game.home_team} />}
           <span className="font-semibold">{game.home_team}</span>
         </div>
       </div>
