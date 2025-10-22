@@ -1,32 +1,33 @@
-// src/pages/Games.tsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
-type GameRow = {
+type Row = {
   id: string;
   slug: string;
-  game_date: string; // ISO
-  status: string;    // "final" | "scheduled"
+  game_date: string;
+  status: string;
   home_team: string;
   away_team: string;
-  home_score: number | null;
-  away_score: number | null;
+  home_score: number;
+  away_score: number;
 };
 
 function teamKeyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
-  const n = (name || "").toLowerCase();
+  const n = name.toLowerCase();
   if (n.includes("blue")) return "RLB";
   if (n.includes("black")) return "RLN";
   if (n.includes("red")) return "RLR";
   return undefined;
 }
+
 function TeamWithLogo({ name }: { name: string }) {
   const key = teamKeyFromName(name);
   const src =
     key === "RLR" ? "/logos/rlr.png" :
     key === "RLB" ? "/logos/rlb.png" :
-    key === "RLN" ? "/logos/rln.png" : undefined;
+    key === "RLN" ? "/logos/rln.png" :
+    undefined;
   return (
     <div className="flex items-center gap-2">
       {src && <img src={src} alt={name} className="h-6 w-auto" />}
@@ -36,10 +37,10 @@ function TeamWithLogo({ name }: { name: string }) {
 }
 
 export default function Games() {
-  const [rows, setRows] = useState<GameRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<Row[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState("");
 
   async function load() {
     setLoading(true);
@@ -49,28 +50,21 @@ export default function Games() {
       .select("id, slug, game_date, status, home_team, away_team, home_score, away_score")
       .order("game_date", { ascending: false });
     if (error) setErr(error.message);
-    else setRows((data || []) as GameRow[]);
+    else setRows((data || []) as Row[]);
     setLoading(false);
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  async function deleteGame(id: string, slug: string) {
-    if (!confirm(`Delete game "${slug}"? This also deletes its events.`)) return;
-    setBusyId(id);
-    try {
-      // delete events first (safer/cleaner)
-      await supabase.from("events").delete().eq("game_id", id);
-      // then delete game
-      const { error } = await supabase.from("games").delete().eq("id", id);
-      if (error) throw error;
+  async function deleteGame(id: string) {
+    if (!window.confirm("Delete this game (and its events)?")) return;
+    // delete the game; events have ON DELETE CASCADE in your DB or you can add it
+    const { error } = await supabase.from("games").delete().eq("id", id);
+    if (error) {
+      setToast(error.message);
+    } else {
+      setToast("Deleted.");
       await load();
-    } catch (e: any) {
-      alert(e.message ?? "Delete failed (RLS?). You must be the creator of this game to delete it.");
-    } finally {
-      setBusyId(null);
     }
   }
 
@@ -80,6 +74,7 @@ export default function Games() {
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Games</h1>
+      {toast && <div className="text-sm text-gray-700 mb-2">{toast}</div>}
 
       <table className="w-full text-left border-separate border-spacing-y-2">
         <thead>
@@ -95,20 +90,14 @@ export default function Games() {
         <tbody>
           {rows.map((g) => {
             const d = new Date(g.game_date);
-            const score = `${g.home_score ?? 0}–${g.away_score ?? 0}`;
+            const score = `${g.home_score}–${g.away_score}`;
             return (
               <tr key={g.id} className="bg-white rounded shadow-sm">
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <Link
-                    to={`/league/games/${g.slug}`}
-                    className="text-blue-600 hover:underline"
-                  >
+                  <Link to={`/league/games/${g.slug}`} className="text-blue-600 hover:underline">
                     {d.toLocaleString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
+                      year: "numeric", month: "short", day: "2-digit",
+                      hour: "2-digit", minute: "2-digit",
                     })}
                   </Link>
                 </td>
@@ -117,14 +106,7 @@ export default function Games() {
                 <td className="px-3 py-3 font-medium">{score}</td>
                 <td className="px-3 py-3 capitalize">{g.status}</td>
                 <td className="px-3 py-3 text-right">
-                  <button
-                    className="text-red-600 hover:underline disabled:opacity-50"
-                    disabled={busyId === g.id}
-                    onClick={() => deleteGame(g.id, g.slug)}
-                    title="Delete game"
-                  >
-                    🗑
-                  </button>
+                  <button className="text-red-600 hover:underline" onClick={() => deleteGame(g.id)}>🗑</button>
                 </td>
               </tr>
             );
