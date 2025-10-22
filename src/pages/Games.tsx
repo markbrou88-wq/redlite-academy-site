@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
 type GameRow = {
-  id: string; // text (game_001…)
+  id: string;            // text id like 'game_001'
   slug: string;
-  game_date: string; // ISO
-  status: string; // “Final” | “Scheduled”
+  game_date: string;
+  status: string;
   home_team: string;
   away_team: string;
   home_score: number;
@@ -20,14 +20,12 @@ function teamKeyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
   if (n.includes("red")) return "RLR";
   return undefined;
 }
-
 function TeamWithLogo({ name }: { name: string }) {
   const key = teamKeyFromName(name);
   const src =
-    key === "RLR" ? "/logos/rlr.png"
-      : key === "RLB" ? "/logos/rlb.png"
-      : key === "RLN" ? "/logos/rln.png"
-      : undefined;
+    key === "RLR" ? "/logos/rlr.png" :
+    key === "RLB" ? "/logos/rlb.png" :
+    key === "RLN" ? "/logos/rln.png" : undefined;
   return (
     <div className="flex items-center gap-2">
       {src && <img src={src} alt={name} className="h-6 w-auto" />}
@@ -41,30 +39,30 @@ export default function Games() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  async function load() {
     setLoading(true);
     setErr(null);
     const { data, error } = await supabase
       .from("games_with_names")
       .select("id, slug, game_date, status, home_team, away_team, home_score, away_score")
       .order("game_date", { ascending: false });
-
     if (error) setErr(error.message);
-    else setRows((data ?? []) as GameRow[]);
+    else setRows((data || []) as GameRow[]);
     setLoading(false);
-  };
+  }
 
   useEffect(() => { load(); }, []);
 
-  const deleteGame = async (id: string) => {
-    if (!confirm("Delete this game and all its events?")) return;
-    // delete its events first (avoid FK issues)
-    await supabase.from("events").delete().eq("game_id", id);
-    // now delete the game itself
+  async function deleteGame(id: string, slug: string) {
+    if (!window.confirm(`Delete game "${slug}" and all its events?`)) return;
+    // thanks to ON DELETE CASCADE the events go away too
     const { error } = await supabase.from("games").delete().eq("id", id);
-    if (error) return alert(error.message);
+    if (error) {
+      alert(error.message);
+      return;
+    }
     await load();
-  };
+  }
 
   if (err) return <div className="p-6 text-red-600">{err}</div>;
   if (loading) return <div className="p-6">Loading…</div>;
@@ -91,10 +89,7 @@ export default function Games() {
             return (
               <tr key={g.id} className="bg-white rounded shadow-sm">
                 <td className="px-3 py-3 whitespace-nowrap">
-                  <Link
-                    to={`/league/games/${g.slug}`}
-                    className="text-blue-600 hover:underline"
-                  >
+                  <Link to={`/league/games/${g.slug}`} className="text-blue-600 hover:underline">
                     {d.toLocaleString(undefined, {
                       year: "numeric",
                       month: "short",
@@ -109,11 +104,7 @@ export default function Games() {
                 <td className="px-3 py-3 font-medium">{score}</td>
                 <td className="px-3 py-3 capitalize">{g.status}</td>
                 <td className="px-3 py-3 text-right">
-                  <button
-                    title="Delete game"
-                    className="text-red-600 hover:underline"
-                    onClick={() => deleteGame(g.id)}
-                  >
+                  <button className="text-red-600 hover:underline" onClick={() => deleteGame(g.id, g.slug)}>
                     🗑
                   </button>
                 </td>
