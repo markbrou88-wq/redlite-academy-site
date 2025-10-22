@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 type Row = {
-  team_id: string;          // "RLR" | "RLB" | "RLN"
-  team_name: string | null; // full name from the view
+  team_id: string;
+  team_name: string | null;
   short_name: string | null;
   gp: number;
   w: number;
@@ -27,13 +27,10 @@ function keyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
 function TeamBadge({ name }: { name: string }) {
   const k = keyFromName(name);
   const src =
-    k === "RLR"
-      ? "/logos/rlr.png"
-      : k === "RLB"
-      ? "/logos/rlb.png"
-      : k === "RLN"
-      ? "/logos/rln.png"
-      : undefined;
+    k === "RLR" ? "/logos/rlr.png" :
+    k === "RLB" ? "/logos/rlb.png" :
+    k === "RLN" ? "/logos/rln.png" :
+    undefined;
 
   return (
     <div className="flex items-center gap-2">
@@ -50,19 +47,15 @@ export default function Standings() {
 
   useEffect(() => {
     (async () => {
-      setErr(null);
       setLoading(true);
-
       const { data, error } = await supabase
         .from("standings_current")
-        .select(
-          "team_id, team_name, short_name, gp, w, l, otl, gf, ga, gd, pts, pts_pct"
-        )
+        .select("team_id, team_name, short_name, gp, w, l, otl, gf, ga, gd, pts, pts_pct")
         .order("pts", { ascending: false })
         .order("gd", { ascending: false });
 
       if (error) setErr(error.message);
-      else setRows((data || []) as Row[]);
+      else setRows((data ?? []) as Row[]);
       setLoading(false);
     })();
   }, []);
@@ -94,9 +87,7 @@ export default function Standings() {
             const name = r.team_name ?? r.short_name ?? r.team_id;
             return (
               <tr key={r.team_id} className="bg-white rounded shadow-sm">
-                <td className="px-3 py-3">
-                  <TeamBadge name={name} />
-                </td>
+                <td className="px-3 py-3"><TeamBadge name={name} /></td>
                 <td className="px-3 py-3">{r.gp}</td>
                 <td className="px-3 py-3">{r.w}</td>
                 <td className="px-3 py-3">{r.l}</td>
