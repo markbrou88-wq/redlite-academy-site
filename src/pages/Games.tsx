@@ -1,12 +1,13 @@
+// Games.tsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
-type Row = {
+type GameRow = {
   id: string;
   slug: string;
   game_date: string;
-  status: string;
+  status: "final" | "scheduled";
   home_team: string;
   away_team: string;
   home_score: number;
@@ -20,14 +21,12 @@ function teamKeyFromName(name: string): "RLR" | "RLB" | "RLN" | undefined {
   if (n.includes("red")) return "RLR";
   return undefined;
 }
-
 function TeamWithLogo({ name }: { name: string }) {
   const key = teamKeyFromName(name);
   const src =
     key === "RLR" ? "/logos/rlr.png" :
     key === "RLB" ? "/logos/rlb.png" :
-    key === "RLN" ? "/logos/rln.png" :
-    undefined;
+    key === "RLN" ? "/logos/rln.png" : undefined;
   return (
     <div className="flex items-center gap-2">
       {src && <img src={src} alt={name} className="h-6 w-auto" />}
@@ -37,10 +36,9 @@ function TeamWithLogo({ name }: { name: string }) {
 }
 
 export default function Games() {
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<GameRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState("");
 
   async function load() {
     setLoading(true);
@@ -50,22 +48,17 @@ export default function Games() {
       .select("id, slug, game_date, status, home_team, away_team, home_score, away_score")
       .order("game_date", { ascending: false });
     if (error) setErr(error.message);
-    else setRows((data || []) as Row[]);
+    else setRows((data || []) as GameRow[]);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
 
   async function deleteGame(id: string) {
-    if (!window.confirm("Delete this game (and its events)?")) return;
-    // delete the game; events have ON DELETE CASCADE in your DB or you can add it
+    if (!confirm("Delete this game?")) return;
     const { error } = await supabase.from("games").delete().eq("id", id);
-    if (error) {
-      setToast(error.message);
-    } else {
-      setToast("Deleted.");
-      await load();
-    }
+    if (error) alert(error.message);
+    else setRows(rows.filter(r => r.id !== id));
   }
 
   if (err) return <div className="p-6 text-red-600">{err}</div>;
@@ -74,8 +67,6 @@ export default function Games() {
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Games</h1>
-      {toast && <div className="text-sm text-gray-700 mb-2">{toast}</div>}
-
       <table className="w-full text-left border-separate border-spacing-y-2">
         <thead>
           <tr className="text-sm text-gray-500">
@@ -84,7 +75,7 @@ export default function Games() {
             <th className="px-3 py-2">Away</th>
             <th className="px-3 py-2">Score</th>
             <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2"></th>
+            <th className="px-3 py-2 w-10"></th>
           </tr>
         </thead>
         <tbody>
@@ -106,7 +97,7 @@ export default function Games() {
                 <td className="px-3 py-3 font-medium">{score}</td>
                 <td className="px-3 py-3 capitalize">{g.status}</td>
                 <td className="px-3 py-3 text-right">
-                  <button className="text-red-600 hover:underline" onClick={() => deleteGame(g.id)}>🗑</button>
+                  <button title="Delete game" className="text-red-600 hover:underline" onClick={() => deleteGame(g.id)}>🗑</button>
                 </td>
               </tr>
             );
